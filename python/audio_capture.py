@@ -1,6 +1,7 @@
 """
 音频录制模块
 使用 sounddevice 进行跨平台音频录制
+支持实时音频流（用于实时字幕 VAD 检测）
 """
 
 import json
@@ -12,6 +13,7 @@ import time
 import wave
 import os
 import uuid
+from collections import deque
 from datetime import datetime
 
 class AudioCapture:
@@ -20,10 +22,23 @@ class AudioCapture:
         self.stream = None
         self.lock = threading.Lock()
 
-    def start_capture(self, sample_rate=16000, channels=1):
-        """开始录音"""
+    def start_capture(self, sample_rate=16000, channels=1, enable_realtime=False):
+        """
+        开始录音
+
+        Args:
+            sample_rate: 采样率（默认 16000）
+            channels: 声道数（默认 1 单声道）
+            enable_realtime: 是否启用实时音频缓冲（用于实时字幕）
+
+        Returns:
+            {'recordingId': ..., 'startTime': ..., 'wavPath': ...}
+        """
         recording_id = str(uuid.uuid4())
         now = time.time()
+
+        # 实时缓冲：deque 自动丢弃旧数据，maxlen=300 ≈ 30 秒（每 0.1s 一 chunk）
+        live_buffer = deque(maxlen=300)
 
         # 创建录制状态
         recording = {
@@ -36,7 +51,9 @@ class AudioCapture:
             'status': 'recording',
             'audio_queue': queue.Queue(),
             'frames': [],
-            'wav_path': self._get_wav_path(recording_id)
+            'wav_path': self._get_wav_path(recording_id),
+            'live_buffer': live_buffer,        # 滚动 30s 实时音频缓冲
+            'enable_realtime': enable_realtime,
         }
 
         self.recordings[recording_id] = recording
@@ -79,13 +96,25 @@ class AudioCapture:
                     print(f'Audio callback status: {status}', file=sys.stderr)
 
                 if recording['status'] == 'recording':
-                    # 写入音频数据
+                    # int16 → float32 归一化
+                    float_data = indata.astype(np.float32) / 32768.0
+                    # 多声道 → 单声道均值
+                    if recording['channels'] > 1:
+                        float_data = float_data.mean(axis=1)
+                    else:
+                        float_data = float_data.squeeze()
+
+                    # 写入 WAV
                     audio_data = indata.tobytes()
                     wf.writeframes(audio_data)
                     recording['frames'].append(audio_data)
 
+                    # 写入实时缓冲（用于 VAD）
+                    if recording['enable_realtime']:
+                        recording['live_buffer'].append(float_data)
+
                     # 计算音频电平
-                    rms = np.sqrt(np.mean(indata.astype(np.float32) ** 2))
+                    rms = np.sqrt(np.mean(float_data ** 2))
                     recording['audio_level'] = min(rms * 10, 1.0)
 
             # 打开流
@@ -123,13 +152,32 @@ class AudioCapture:
                         'status': 'recording',
                         'duration': duration,
                         'audioLevel': recording.get('audio_level', 0),
-                        'speakersCount': 0  # TODO: 实时说话人检测
+                        'speakersCount': 0
                     }
                 }
                 print(json.dumps(status_msg))
                 sys.stdout.flush()
 
             time.sleep(0.5)
+
+    def get_live_audio(self, recording_id: str) -> np.ndarray:
+        """
+        获取当前实时音频缓冲（最近约 30 秒）
+        线程安全：deque 操作在 CPython 中受 GIL 保护
+
+        Returns:
+            numpy.ndarray (float32, 1D) 或空数组
+        """
+        recording = self.recordings.get(recording_id)
+        if not recording:
+            return np.array([], dtype=np.float32)
+
+        buf = recording.get('live_buffer')
+        if not buf:
+            return np.array([], dtype=np.float32)
+
+        # deque 合并为连续数组（已有 GIL 保护）
+        return np.concatenate(list(buf)) if buf else np.array([], dtype=np.float32)
 
     def pause_capture(self, recording_id):
         """暂停录音"""
@@ -180,7 +228,6 @@ class AudioCapture:
 
     def _get_wav_path(self, recording_id):
         """获取 WAV 文件路径"""
-        # 使用临时目录
         import tempfile
         temp_dir = tempfile.gettempdir()
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
