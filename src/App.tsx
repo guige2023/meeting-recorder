@@ -63,8 +63,13 @@ function App() {
       }
     })
 
-    // 系统主题变化
+    // 系统主题变化 — 只有用户没有手动设置过时才跟随
     window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+      const saved = localStorage.getItem('meetingRecorderSettings')
+      if (saved) {
+        const parsed = JSON.parse(saved)
+        if (parsed._themeSource === 'manual') return
+      }
       setDarkMode(e.matches)
       if (e.matches) {
         document.documentElement.classList.add('dark')
@@ -116,7 +121,7 @@ function App() {
           )}
           <div className={`w-2 h-2 rounded-full ${pythonReady ? 'bg-green-500' : 'bg-yellow-500'}`}
                title={pythonReady ? 'Python 就绪' : 'Python 初始化中...'} />
-          <span className="text-sm text-gray-400 dark:text-gray-500">v1.0</span>
+          <span className="text-sm text-gray-400 dark:text-gray-500">v1.0.1</span>
         </div>
       </header>
 
