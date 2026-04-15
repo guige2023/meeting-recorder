@@ -6,7 +6,7 @@ numpy>=1.24.0
 # db-sqlite3 is built-in with Python
 
 # Transcription
-funasr>=2.0.0
+funasr>=1.0.0
 
 # Audio file I/O
 soundfile>=0.12.0

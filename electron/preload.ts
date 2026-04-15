@@ -1,5 +1,8 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
+// 调试日志
+console.log('[preload] script loaded, electron:', process.versions.electron)
+
 contextBridge.exposeInMainWorld('electronAPI', {
   // Python RPC 调用
   pythonCall: (method: string, params?: any) => ipcRenderer.invoke('python_call', method, params),
@@ -57,6 +60,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   }
 })
 
+console.log('[preload] electronAPI exposed')
+
+// 全局类型声明（仅供 IDE 使用，不影响运行时）
 declare global {
   interface Window {
     electronAPI: {

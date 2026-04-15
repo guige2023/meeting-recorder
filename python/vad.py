@@ -34,10 +34,12 @@ class VAD:
             self.get_speech_timestamps = utils[0]
             self.models_loaded = True
             print('Silero-VAD model loaded', file=sys.stderr)
+        except ImportError as e:
+            print(f'Failed to load Silero-VAD (missing module): {e}', file=sys.stderr)
         except Exception as e:
-            print(f'Failed to load Silero-VAD: {e}', file=sys.stderr)
-            import traceback
-            traceback.print_exc()
+            # 网络错误（HTTP 429 等）或模型加载失败
+            print(f'Failed to load Silero-VAD (non-fatal): {e}', file=sys.stderr)
+            # 不再崩溃，VAD 将以 fallback 模式运行（音频全传给 ASR）
 
     def detect_speech(
         self,

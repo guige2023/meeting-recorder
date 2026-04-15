@@ -26,7 +26,7 @@ class TranscriptionService:
     def _init_db(self):
         """初始化数据库"""
         db_dir = os.path.dirname(DB_PATH)
-        if db_dir and not os.exists(db_dir):
+        if db_dir and not os.path.exists(db_dir):
             os.makedirs(db_dir)
 
         conn = sqlite3.connect(DB_PATH)

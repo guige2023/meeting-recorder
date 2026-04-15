@@ -143,16 +143,16 @@ function createTray() {
   const iconName = process.platform === 'win32' ? 'icon.ico' : 'icon.png'
   let iconPath: string
 
-  // 开发模式用 resources 目录下的图标
+  // 打包后: process.resourcesPath/resources/
+  // 开发模式: 项目根目录 resources/（__dirname = dist-electron/，上级 = 项目根）
   if (app.isPackaged) {
     iconPath = join(process.resourcesPath, 'resources', iconName)
   } else {
-    // 开发模式从项目根目录 resources/ 读取
-    iconPath = join(__dirname, '..', '..', 'resources', iconName)
+    iconPath = join(__dirname, '..', 'resources', iconName)
   }
 
   if (!fs.existsSync(iconPath)) {
-    iconPath = join(__dirname, '..', '..', 'resources', 'icon.png')
+    iconPath = join(__dirname, '..', 'resources', 'icon.png')
   }
   if (!fs.existsSync(iconPath)) {
     console.log('[Tray] icon not found, skipping tray creation')
@@ -361,6 +361,10 @@ ipcMain.handle('get_settings', () => {
 ipcMain.handle('show_item_in_folder', (_event, path: string) => {
   shell.showItemInFolder(path)
 })
+
+// 禁用 GPU 加速，避免 macOS 上的崩溃问题
+app.commandLine.appendSwitch('disable-gpu')
+app.commandLine.appendSwitch('disable-software-rasterizer')
 
 // App lifecycle
 app.whenReady().then(() => {

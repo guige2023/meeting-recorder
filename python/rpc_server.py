@@ -75,12 +75,31 @@ def send_notification(method, params):
     """发送通知到 Electron"""
     print(json.dumps({'jsonrpc': '2.0', 'method': method, 'params': params}), flush=True)
 
-from audio_capture import AudioCapture
-from transcriber import TranscriptionService
-from audio_converter import convert_to_wav, get_audio_info
-from realtime_transcriber import RealtimeTranscriberPool
+# 懒加载模块，避免在依赖缺失时直接崩溃
+# 在 main() 中初始化前先发送 initialized 通知，让 Electron 知道进程已启动
+_audio_capture_cls = None
+_transcription_service_cls = None
+_audio_converter = None
+_realtime_pool_cls = None
+_import_error = None
 
-# 全局单例
+def _lazy_imports():
+    global _audio_capture_cls, _transcription_service_cls, _audio_converter, _realtime_pool_cls, _import_error
+    if _import_error is not None:
+        return
+    try:
+        from audio_capture import AudioCapture as _ac
+        from transcriber import TranscriptionService as _ts
+        from audio_converter import convert_to_wav as _cw, get_audio_info as _gi
+        from realtime_transcriber import RealtimeTranscriberPool as _rt
+        _audio_capture_cls = _ac
+        _transcription_service_cls = _ts
+        _audio_converter = (_cw, _gi)
+        _realtime_pool_cls = _rt
+    except ImportError as e:
+        _import_error = str(e)
+
+# 全局单例（延迟初始化）
 audio_capture = None
 transcription_service = None
 realtime_pool = None  # RealtimeTranscriberPool
@@ -88,6 +107,12 @@ realtime_pool = None  # RealtimeTranscriberPool
 def handle_request(method, params, rpc_id):
     """处理 RPC 请求"""
     try:
+        # 确保模块已加载
+        _lazy_imports()
+
+        if _import_error and method not in ('check_env', 'initialize', 'get_app_path', 'get_dark_mode'):
+            return {'error': f'Python 依赖缺失: {_import_error}。请先安装依赖。'}
+
         if method == 'initialize':
             return {'status': 'ok'}
         elif method == 'check_env':
@@ -139,7 +164,7 @@ def handle_request(method, params, rpc_id):
             # 音频格式转换（如果是非 WAV 格式）
             ext = os.path.splitext(file_path)[1].lower()
             if ext not in ('.wav',):
-                converted = convert_to_wav(file_path)
+                converted = _audio_converter[0](file_path)
                 if converted:
                     file_path = converted
                     send_notification('env_notice', {
@@ -181,7 +206,7 @@ def handle_request(method, params, rpc_id):
         elif method == 'search_meetings':
             return transcription_service.search_meetings(params)
         elif method == 'get_audio_info':
-            return get_audio_info(params['filePath'])
+            return _audio_converter[1](params['filePath'])
         elif method == 'clear_cache':
             # 清除模型缓存
             home = os.path.expanduser('~')
@@ -287,13 +312,25 @@ def handle_request(method, params, rpc_id):
 def main():
     global audio_capture, transcription_service, realtime_pool
 
-    # 初始化服务
-    audio_capture = AudioCapture()
-    transcription_service = TranscriptionService()
-    realtime_pool = RealtimeTranscriberPool()
-
-    # 发送初始化消息
+    # 先发送 initialized，让 Electron 知道 Python 进程已启动
     print(json.dumps({'jsonrpc': '2.0', 'method': 'initialized', 'params': {}}), flush=True)
+
+    # 懒加载模块（如果缺少依赖，进程继续运行，可响应 check_env）
+    _lazy_imports()
+    if _import_error:
+        # 依赖缺失但进程活着，可以响应 check_env
+        pass
+    else:
+        # 依赖正常，初始化服务（捕获所有异常，防止单模块崩溃导致进程退出）
+        try:
+            audio_capture = _audio_capture_cls()
+            transcription_service = _transcription_service_cls()
+            realtime_pool = _realtime_pool_cls()
+        except Exception as e:
+            import sys as _sys
+            print(f'[rpc_server] Service init error (non-fatal): {e}', file=_sys.stderr)
+            import traceback as _tb
+            _tb.print_exc(file=_sys.stderr)
 
     # 主循环：读取 stdin 处理 RPC
     buffer = ''
