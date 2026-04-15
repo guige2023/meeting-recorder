@@ -1,5 +1,38 @@
 # 已完成任务记录
 
+## 2026-04-15 Phase 2：SenseVoice 转写 + pyannote 说话人分割 + 完整 UI
+
+**完成时间**：2026-04-15
+
+**改动概要**：
+- python/transcriber.py: TranscriptionService（转写+说话人分割+结果合并+SQLite持久化）
+- python/sensevoice_transcriber.py: SenseVoice Small 模型封装
+- python/diarizer.py: pyannote.audio 说话人分割
+- python/vad.py: Silero-VAD 语音活动检测
+- python/rpc_server.py: 新增 process_file/get_meeting_detail/search_meetings 方法
+- electron/main.ts: 修复 Python ready 状态，pendingRequests Map，超时 5 分钟
+- src/types/electron.d.ts: 完善类型声明（CaptureStatusData/RealtimeCaptionData/ProcessingProgressData）
+- src/stores/meetingStore.ts: 新增 getMeetingDetail/searchMeetings/processingProgress 状态
+- src/stores/recorderStore.ts: stopRecording 自动触发转写
+- src/components/RecorderView: 导入进度弹窗 + TranscriptionResultView（按人分组展示）
+- src/components/HistoryView: 点击展开详情 + 按人筛选 + 导出 TXT/Markdown
+
+**验证结果**：
+- ✅ `npm run build` 全量编译通过
+- ✅ macOS DMG 打包成功：release/MeetingRecorder-1.0.0-arm64.dmg
+- ✅ Python 代码无语法错误
+
+**文件变更**：
+- 新增：python/diarizer.py, python/sensevoice_transcriber.py, python/vad.py
+- 修改：python/transcriber.py（完整重写）
+- 修改：python/rpc_server.py（新增方法）
+- 修改：electron/main.ts（pendingRequests + 超时 5 分钟）
+- 修改：src/stores/meetingStore.ts, src/stores/recorderStore.ts
+- 修改：src/components/RecorderView.tsx, src/components/HistoryView.tsx
+- commit: 535eba53 "Phase 2: SenseVoice 转写 + pyannote 说话人分割 + 完整 UI"
+
+---
+
 ## 2026-04-15 Phase 1：项目脚手架 & 录音核心
 
 **完成时间**：2026-04-15
