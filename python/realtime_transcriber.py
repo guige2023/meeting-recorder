@@ -37,13 +37,26 @@ class RealtimeTranscriber:
         if self.models_loaded:
             return
         try:
-            from funasr import AutoModel
-            import torch
+            import os
+            os.environ['CUDA_VISIBLE_DEVICES'] = ''
 
-            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            # 如果设置了 MODELSCOPE_CACHE，使用本地模型
+            model_cache = os.environ.get('MODELSCOPE_CACHE', '')
+            if model_cache:
+                local_model = os.path.join(model_cache, 'models', 'iic', 'SenseVoiceSmall')
+                if os.path.isdir(local_model):
+                    model_path = local_model
+                    print(f'Realtime: using local model: {model_path}', file=sys.stderr)
+                else:
+                    model_path = 'iic/SenseVoiceSmall'
+            else:
+                model_path = 'iic/SenseVoiceSmall'
+
+            from funasr import AutoModel
+
             self.model = AutoModel(
-                model='iic/SenseVoiceSmall',
-                device=device,
+                model=model_path,
+                device='cpu',
                 disable_update=True
             )
             self.models_loaded = True

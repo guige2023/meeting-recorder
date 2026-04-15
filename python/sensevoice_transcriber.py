@@ -24,13 +24,30 @@ class Transcriber:
             return
 
         try:
+            import os
+
+            # 确保使用 CPU，避免 CUDA 初始化挂起
+            os.environ['CUDA_VISIBLE_DEVICES'] = ''
+
+            # 如果设置了 MODELSCOPE_CACHE（由 Electron main.ts 传入），使用本地模型
+            model_cache = os.environ.get('MODELSCOPE_CACHE', '')
+            if model_cache:
+                # 模型在 MODELSCOPE_CACHE/models/iic/SenseVoiceSmall
+                local_model = os.path.join(model_cache, 'models', 'iic', 'SenseVoiceSmall')
+                if os.path.isdir(local_model):
+                    model_path = local_model
+                    print(f'Using local model: {model_path}', file=__import__('sys').stderr)
+                else:
+                    model_path = 'iic/SenseVoiceSmall'
+            else:
+                model_path = 'iic/SenseVoiceSmall'
+
             from funasr import AutoModel
             from funasr.utils.postprocess_utils import rich_transcription_postprocess
 
             # 加载 SenseVoice Small
-            # device='cuda' for GPU, device='cpu' for CPU
             self.model = AutoModel(
-                model='iic/SenseVoiceSmall',
+                model=model_path,
                 device=self.device,
                 disable_update=True
             )

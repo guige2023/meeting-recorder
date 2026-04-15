@@ -10,6 +10,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 文件选择
   selectFile: () => ipcRenderer.invoke('select_file'),
 
+  // 导入录音文件（复制到 app data 目录）
+  importAudioFile: (srcPath: string) => ipcRenderer.invoke('import_audio_file', srcPath),
+
   // 获取应用数据路径
   getAppPath: () => ipcRenderer.invoke('get_app_path'),
 
@@ -73,6 +76,7 @@ declare global {
   interface Window {
     electronAPI: {
       pythonCall: (method: string, params?: any) => Promise<any>
+      importAudioFile: (srcPath: string) => Promise<{ meetingId: string; audioPath: string }>
       selectFile: () => Promise<string[]>
       getAppPath: () => Promise<string>
       getAudioUrl: (filePath: string) => Promise<string>

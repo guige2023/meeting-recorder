@@ -291,6 +291,8 @@ function startPythonServer() {
     stdio: ['pipe', 'pipe', 'pipe'],
     env: {
       ...process.env,
+      // 强制使用 CPU，防止 CUDA 初始化挂起
+      'CUDA_VISIBLE_DEVICES': '',
       // 让 modelscope 和 torch 从 bundled models/ 读取模型
       'MODELSCOPE_CACHE': modelCacheDir,
       'TORCH_HUB_DIR': torchHubDir,
@@ -414,6 +416,26 @@ ipcMain.handle('select_file', async () => {
     ]
   })
   return result.filePaths
+})
+
+// 导入录音文件：复制到 app data 目录，然后触发 Python 处理
+ipcMain.handle('import_audio_file', async (_event, srcPath: string) => {
+  const dataDir = app.getPath('userData')
+  const recordingsDir = join(dataDir, 'recordings')
+  if (!fs.existsSync(recordingsDir)) {
+    fs.mkdirSync(recordingsDir, { recursive: true })
+  }
+
+  const ext = path.extname(srcPath)
+  const timestamp = Date.now()
+  const destFileName = `import_${timestamp}${ext}`
+  const destPath = join(recordingsDir, destFileName)
+
+  // 复制文件
+  fs.copyFileSync(srcPath, destPath)
+
+  // 返回目标路径，让 Python 处理
+  return { audioPath: destPath }
 })
 
 ipcMain.handle('get_app_path', () => {

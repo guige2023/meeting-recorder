@@ -211,6 +211,26 @@ def handle_request(method, params, rpc_id):
             return {'status': 'updated'}
         elif method == 'search_meetings':
             return transcription_service.search_meetings(params)
+        elif method == 'import_audio_file':
+            audio_path = params['audioPath']
+            meeting_id = transcription_service.create_meeting_from_audio(audio_path)
+
+            # 后台处理
+            def _process():
+                try:
+                    transcription_service.process_file(
+                        file_path=audio_path,
+                        meeting_id=meeting_id,
+                        language=params.get('language', 'zh')
+                    )
+                except Exception as e:
+                    traceback.print_exc()
+                    send_notification('processing_error', {
+                        'meetingId': meeting_id,
+                        'error': str(e)
+                    })
+            threading.Thread(target=_process, daemon=True).start()
+            return {'meetingId': meeting_id, 'audioPath': audio_path}
         elif method == 'get_audio_info':
             return _audio_converter[1](params['filePath'])
         elif method == 'clear_cache':

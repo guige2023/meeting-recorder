@@ -105,12 +105,26 @@ class TranscriptionService:
         try:
             # 加载 SenseVoice（语音转写）
             try:
+                import os
+                os.environ['CUDA_VISIBLE_DEVICES'] = ''
+
+                # 如果设置了 MODELSCOPE_CACHE，使用本地模型
+                model_cache = os.environ.get('MODELSCOPE_CACHE', '')
+                if model_cache:
+                    local_model = os.path.join(model_cache, 'models', 'iic', 'SenseVoiceSmall')
+                    if os.path.isdir(local_model):
+                        model_path = local_model
+                        print(f'Using local model: {model_path}', file=sys.stderr)
+                    else:
+                        model_path = 'iic/SenseVoiceSmall'
+                else:
+                    model_path = 'iic/SenseVoiceSmall'
+
                 from funasr import AutoModel
-                import torch
-                device = 'cuda' if torch.cuda.is_available() else 'cpu'
                 self.transcription_model = AutoModel(
-                    model='iic/SenseVoiceSmall',
-                    device=device
+                    model=model_path,
+                    device='cpu',
+                    disable_update=True
                 )
                 print('SenseVoice loaded', file=sys.stderr)
             except Exception as e:
@@ -137,6 +151,39 @@ class TranscriptionService:
             }
         }
         print(json.dumps(msg), flush=True)
+
+    def create_meeting_from_audio(self, file_path: str) -> str:
+        """创建会议记录（用于导入外部音频文件），返回 meeting_id"""
+        import sys
+        import soundfile as sf
+
+        now = datetime.now()
+        timestamp = now.timestamp()
+        meeting_id = str(uuid.uuid4())
+
+        # 获取音频时长
+        duration = 0
+        try:
+            audio_info = sf.info(file_path)
+            duration = audio_info.duration
+        except Exception as e:
+            print(f'Could not read audio duration: {e}', file=sys.stderr)
+
+        # 从文件名生成标题
+        title = os.path.splitext(os.path.basename(file_path))[0]
+        if len(title) > 60:
+            title = title[:60]
+
+        conn = sqlite3.connect(_get_db_path())
+        c = conn.cursor()
+        c.execute('''
+            INSERT INTO meetings (id, title, created_at, audio_path, status, duration)
+            VALUES (?, ?, ?, ?, ?, ?)
+        ''', (meeting_id, title, timestamp, file_path, 'processing', duration))
+        conn.commit()
+        conn.close()
+
+        return meeting_id
 
     def process_file(self, file_path: str, meeting_id: str = None, language: str = 'zh'):
         """

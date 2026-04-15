@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Search, Calendar, Users, Clock, Star, Trash2, FileAudio, X, ChevronRight, Copy, Filter, Tag, Edit3, Check, AudioLines, Mic, BarChart2 } from 'lucide-react'
+import { Search, Calendar, Users, Clock, Star, Trash2, FileAudio, X, ChevronRight, Copy, Filter, Tag, Edit3, Check, AudioLines, Mic, BarChart2, Upload, Loader2 } from 'lucide-react'
 import { useMeetingStore, MeetingDetail, SearchFilters, DateRange, Segment } from '@/stores/meetingStore'
 import AudioPlayer from './AudioPlayer'
 import BatchExportModal from './BatchExportModal'
@@ -14,7 +14,9 @@ export default function HistoryView() {
     toggleFavorite,
     updateMeeting,
     getMeetingDetail,
-    searchMeetings
+    searchMeetings,
+    setProcessingProgress,
+    clearProcessingProgress,
   } = useMeetingStore()
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -30,6 +32,11 @@ export default function HistoryView() {
   const [searchHighlight, setSearchHighlight] = useState<string>('')
   const [batchSelectedIds, setBatchSelectedIds] = useState<Set<string>>(new Set())
   const [batchModalOpen, setBatchModalOpen] = useState(false)
+
+  // 录音导入状态
+  const [isDragging, setIsDragging] = useState(false)
+  const [importingFile, setImportingFile] = useState<string | null>(null)
+  const dragCounterRef = useRef(0)
 
   useEffect(() => { fetchMeetings() }, [])
 
@@ -140,6 +147,61 @@ export default function HistoryView() {
       setCopiedId(segId)
       setTimeout(() => setCopiedId(null), 2000)
     })
+  }
+
+  // 录音导入处理
+  const handleImportFile = async (filePath: string) => {
+    const fileName = filePath.split('/').pop() || filePath
+    setImportingFile(fileName)
+    try {
+      const result = await window.electronAPI.pythonCall('import_audio_file', { filePath })
+      if (result && result.meetingId) {
+        // 刷新列表
+        await fetchMeetings()
+        // 设置处理进度监听（导入后立即进入 processing 状态）
+        setProcessingProgress(result.meetingId, 0, '正在导入...')
+      }
+    } catch (err) {
+      console.error('Import failed:', err)
+    } finally {
+      setImportingFile(null)
+    }
+  }
+
+  const handleFileSelect = async () => {
+    const files = await window.electronAPI.selectFile()
+    if (files && files.length > 0) {
+      handleImportFile(files[0])
+    }
+  }
+
+  // 拖拽处理
+  const handleDragEnter = (e: React.DragEvent) => {
+    e.preventDefault()
+    dragCounterRef.current++
+    setIsDragging(true)
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault()
+    dragCounterRef.current--
+    if (dragCounterRef.current === 0) setIsDragging(false)
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+  }
+
+  const handleDrop = async (e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    dragCounterRef.current = 0
+    const files = Array.from(e.dataTransfer.files)
+    const audioFile = files.find(f => /\.(wav|mp3|m4a|flac|ogg|opus|aac|wma)$/i.test(f.name))
+    if (audioFile) {
+      // @ts-ignore — path 在 Electron 文件对象上可用
+      handleImportFile(audioFile.path)
+    }
   }
 
   // 高亮搜索关键词
@@ -328,13 +390,36 @@ export default function HistoryView() {
                   ↓ 批量导出 ({batchSelectedIds.size})
                 </button>
               )}
+              <button
+                onClick={handleFileSelect}
+                disabled={!!importingFile}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-green-500 hover:bg-green-600 text-white dark:bg-green-600 dark:hover:bg-green-700 rounded-lg transition-colors disabled:opacity-50"
+                title="导入本地录音文件（.wav / .mp3 / .m4a）"
+              >
+                {importingFile ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                {importingFile ? `导入中: ${importingFile.slice(0, 20)}...` : '导入录音'}
+              </button>
             </>
           )}
         </div>
       </div>
 
-      {/* Meeting List */}
-      <div className="flex-1 overflow-y-auto space-y-3">
+      {/* Meeting List + Drag-Drop Zone */}
+      <div
+        className={`flex-1 overflow-y-auto space-y-3 relative ${isDragging ? 'ring-2 ring-dashed ring-primary-400 dark:ring-primary-600 rounded-xl' : ''}`}
+        onDragEnter={handleDragEnter}
+        onDragLeave={handleDragLeave}
+        onDragOver={handleDragOver}
+        onDrop={handleDrop}
+      >
+        {/* Drag overlay */}
+        {isDragging && (
+          <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-primary-50/80 dark:bg-primary-900/30 rounded-xl pointer-events-none">
+            <Upload size={48} className="text-primary-500 mb-3" />
+            <p className="text-primary-600 dark:text-primary-300 font-medium">松开以导入录音</p>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">支持 .wav / .mp3 / .m4a</p>
+          </div>
+        )}
         {loading ? <div className="text-center py-12 text-gray-400">加载中...</div>
          : displayMeetings.length === 0 ? <div className="text-center py-12 text-gray-400 dark:text-gray-500">
             {searchQuery || filterFavorites !== null || filterSpeakerCount !== null || filterTimeRange !== 'all' ? '没有找到匹配的会议' : '暂无会议记录'}
@@ -463,6 +548,8 @@ function MeetingDetailView({
   const [speakerNameValue, setSpeakerNameValue] = useState('')
   const [showAudioPlayer, setShowAudioPlayer] = useState(false)
   const { updateMeeting, updateSpeaker } = useMeetingStore()
+  const { importMeeting } = useMeetingStore()
+  const { setProcessingProgress, clearProcessingProgress } = useMeetingStore()
 
   if (detail.segments.length === 0) return <div className="text-center py-8 text-gray-400 dark:text-gray-500">暂无转写内容</div>
 
