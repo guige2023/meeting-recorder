@@ -465,6 +465,8 @@ function MeetingDetailView({
       <div className="flex gap-2 mt-4 pt-4 border-t border-gray-100 dark:border-gray-700">
         <button onClick={() => exportAsTxt(detail)} className="px-4 py-2 text-sm bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg transition-colors">导出 TXT</button>
         <button onClick={() => exportAsMarkdown(detail)} className="px-4 py-2 text-sm bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg transition-colors">导出 Markdown</button>
+        <button onClick={() => exportAsJson(detail)} className="px-4 py-2 text-sm bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg transition-colors">导出 JSON</button>
+        <button onClick={() => exportAsSrt(detail)} className="px-4 py-2 text-sm bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-lg transition-colors">导出 SRT</button>
       </div>
     </div>
   )
@@ -492,6 +494,87 @@ function exportAsMarkdown(detail: MeetingDetail) {
     lines.push(`> [${formatTime2(seg.startTime)}] ${seg.text}`)
   }
   downloadFile(detail.meeting.title + '.md', lines.join('\n'), 'text/markdown')
+}
+
+function exportAsJson(detail: MeetingDetail) {
+  // 构建完整结构化数据
+  const exportData = {
+    version: '1.0',
+    exportedAt: new Date().toISOString(),
+    meeting: {
+      id: detail.meeting.id,
+      title: detail.meeting.title,
+      createdAt: new Date(detail.meeting.createdAt).toISOString(),
+      duration: detail.meeting.duration,
+      audioPath: detail.meeting.audioPath,
+      status: detail.meeting.status,
+      favorite: detail.meeting.favorite,
+      tags: detail.meeting.tags,
+      speakerCount: detail.meeting.speakerCount,
+      notes: detail.meeting.notes,
+    },
+    speakers: Object.values(detail.speakers).map(sp => ({
+      id: sp.id,
+      label: sp.label,
+      name: sp.name,
+      color: sp.color,
+      totalDuration: sp.total_duration,
+    })),
+    segments: detail.segments.map(seg => ({
+      id: seg.id,
+      speakerId: seg.speakerId,
+      speakerLabel: seg.speakerLabel,
+      speakerName: seg.speakerName,
+      speakerColor: seg.speakerColor,
+      startTime: seg.startTime,
+      endTime: seg.endTime,
+      text: seg.text,
+      confidence: seg.confidence,
+      duration: seg.endTime - seg.startTime,
+    })),
+    statistics: {
+      totalSegments: detail.segments.length,
+      totalSpeakers: Object.keys(detail.speakers).length,
+      totalDuration: detail.meeting.duration,
+      speakerDurations: Object.values(detail.speakers).reduce((acc, sp) => {
+        acc[sp.name] = sp.total_duration || 0
+        return acc
+      }, {} as Record<string, number>),
+    },
+  }
+  downloadFile(
+    detail.meeting.title + '.json',
+    JSON.stringify(exportData, null, 2),
+    'application/json'
+  )
+}
+
+function exportAsSrt(detail: MeetingDetail) {
+  // SRT 格式: index\nHH:MM:SS,mmm --> HH:MM:SS,mmm\ntext\n\n
+  const srtTime = (seconds: number): string => {
+    const h = Math.floor(seconds / 3600)
+    const m = Math.floor((seconds % 3600) / 60)
+    const s = Math.floor(seconds % 60)
+    const ms = Math.floor((seconds % 1) * 1000)
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')},${String(ms).padStart(3, '0')}`
+  }
+
+  const speakerMap: Record<string, string> = {}
+  for (const sp of Object.values(detail.speakers)) speakerMap[sp.id] = sp.name
+
+  const lines: string[] = []
+  detail.segments.forEach((seg, i) => {
+    const speaker = speakerMap[seg.speakerId] || '未知'
+    const index = i + 1
+    const start = srtTime(seg.startTime)
+    const end = srtTime(seg.endTime)
+    lines.push(`${index}`)
+    lines.push(`${start} --> ${end}`)
+    lines.push(`[${speaker}] ${seg.text}`)
+    lines.push('')
+  })
+
+  downloadFile(detail.meeting.title + '.srt', lines.join('\n'), 'text/plain')
 }
 
 function formatTime2(seconds: number) {
