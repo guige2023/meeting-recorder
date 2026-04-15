@@ -41,6 +41,8 @@ interface ElectronAPI {
   saveSettings: (settings: Record<string, any>) => Promise<any>
   getSettings: () => Promise<Record<string, any>>
   showItemInFolder: (path: string) => Promise<void>
+  getOldRecordings: (days?: number) => Promise<{ count: number; fileCount: number; totalBytes: number; meetings: any[] }>
+  cleanupOldRecordings: (days?: number) => Promise<{ deletedFiles: number; deletedRecords: number; freedBytes: number }>
   onCaptureStatus: (callback: (data: CaptureStatusData) => void) => void
   onRealtimeCaption: (callback: (data: RealtimeCaptionData) => void) => void
   onProcessingProgress: (callback: (data: ProcessingProgressData) => void) => void

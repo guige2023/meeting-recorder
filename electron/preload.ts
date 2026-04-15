@@ -30,6 +30,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 在文件夹中显示
   showItemInFolder: (path: string) => ipcRenderer.invoke('show_item_in_folder', path),
 
+  // 清理旧录音
+  getOldRecordings: (days?: number) =>
+    ipcRenderer.invoke('get_old_recordings', days != null ? { days } : {}),
+  cleanupOldRecordings: (days?: number) =>
+    ipcRenderer.invoke('cleanup_old_recordings', days != null ? { days } : {}),
+
   // 监听 Python 推送的消息
   onCaptureStatus: (callback: (data: any) => void) => {
     ipcRenderer.on('capture_status', (_event, data) => callback(data))
@@ -76,6 +82,8 @@ declare global {
       saveSettings: (settings: Record<string, any>) => Promise<any>
       getSettings: () => Promise<Record<string, any>>
       showItemInFolder: (path: string) => Promise<void>
+      getOldRecordings: (days?: number) => Promise<{ count: number; fileCount: number; totalBytes: number; meetings: any[] }>
+      cleanupOldRecordings: (days?: number) => Promise<{ deletedFiles: number; deletedRecords: number; freedBytes: number }>
       onCaptureStatus: (callback: (data: any) => void) => void
       onRealtimeCaption: (callback: (data: any) => void) => void
       onProcessingProgress: (callback: (data: any) => void) => void

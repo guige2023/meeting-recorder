@@ -20,6 +20,9 @@ export default function SettingsView() {
   const [savedMsg, setSavedMsg] = useState('')
   const [cacheSize, setCacheSize] = useState('')
   const [appPath, setAppPath] = useState('')
+  const [cleaningUp, setCleaningUp] = useState(false)
+  const [cleanupInfo, setCleanupInfo] = useState<{ count: number; fileCount: number; totalBytes: number } | null>(null)
+  const [showCleanupPreview, setShowCleanupPreview] = useState(false)
   const { clearCache, clearData } = useMeetingStore()
 
   useEffect(() => {
@@ -87,6 +90,34 @@ export default function SettingsView() {
     if (!confirm('确定要清除所有历史记录吗？此操作不可恢复。')) return
     await clearData()
     alert('历史记录已清除')
+  }
+
+  const handleCleanupPreview = async () => {
+    try {
+      const info = await window.electronAPI.getOldRecordings(30)
+      setCleanupInfo(info)
+      setShowCleanupPreview(true)
+    } catch (e) {
+      console.error(e)
+      alert('获取清理信息失败')
+    }
+  }
+
+  const handleConfirmCleanup = async () => {
+    if (!confirm(`确定要删除 ${cleanupInfo?.count || 0} 条旧录音（将释放 ${cleanupInfo?.totalBytes ? (cleanupInfo.totalBytes / 1024 / 1024).toFixed(1) : 0} MB）？此操作不可恢复。`)) return
+    setCleaningUp(true)
+    setShowCleanupPreview(false)
+    try {
+      const result = await window.electronAPI.cleanupOldRecordings(30)
+      const freedMB = (result.freedBytes / 1024 / 1024).toFixed(1)
+      alert(`已清理 ${result.deletedFiles} 个文件，释放 ${freedMB} MB 空间`)
+      setCleanupInfo(null)
+    } catch (e) {
+      console.error(e)
+      alert('清理失败')
+    } finally {
+      setCleaningUp(false)
+    }
   }
 
   return (
@@ -282,6 +313,17 @@ export default function SettingsView() {
                 </div>
               </div>
             </button>
+            <button onClick={handleCleanupPreview} disabled={cleaningUp}
+              className="w-full flex items-center justify-between px-4 py-3 hover:bg-orange-50 dark:hover:bg-orange-900/20 rounded-lg transition-colors disabled:opacity-50">
+              <div className="flex items-center gap-3">
+                <Trash2 size={20} className="text-orange-400" />
+                <div className="text-left">
+                  <div className="text-sm font-medium text-orange-600 dark:text-orange-400">清理旧录音</div>
+                  <div className="text-xs text-gray-500">删除 30 天前未收藏的录音</div>
+                </div>
+              </div>
+              {cleaningUp && <span className="text-xs text-orange-500">清理中...</span>}
+            </button>
           </div>
         </section>
 
@@ -294,6 +336,42 @@ export default function SettingsView() {
           </button>
         </div>
       </div>
+
+      {/* Cleanup Preview Modal */}
+      {showCleanupPreview && cleanupInfo && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setShowCleanupPreview(false)}>
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 w-96 shadow-2xl" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">清理旧录音预览</h3>
+            <div className="space-y-3 mb-6">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600 dark:text-gray-400">将删除记录</span>
+                <span className="font-medium text-gray-900 dark:text-white">{cleanupInfo.count} 条</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600 dark:text-gray-400">将删除文件</span>
+                <span className="font-medium text-gray-900 dark:text-white">{cleanupInfo.fileCount} 个</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600 dark:text-gray-400">将释放空间</span>
+                <span className="font-medium text-orange-600 dark:text-orange-400">
+                  {cleanupInfo.totalBytes > 0 ? (cleanupInfo.totalBytes / 1024 / 1024).toFixed(1) : 0} MB
+                </span>
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 mb-6">仅删除 30 天前未收藏的录音，已收藏的录音不会被删除。</p>
+            <div className="flex gap-3">
+              <button onClick={() => setShowCleanupPreview(false)}
+                className="flex-1 px-4 py-2 border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors text-sm">
+                取消
+              </button>
+              <button onClick={handleConfirmCleanup}
+                className="flex-1 px-4 py-2 bg-orange-500 hover:bg-orange-600 text-white rounded-lg font-medium transition-colors text-sm">
+                确认删除
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

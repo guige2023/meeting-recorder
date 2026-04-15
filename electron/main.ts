@@ -42,6 +42,14 @@ function getPythonPath(): string {
   return join(getBundledPythonDir(), 'rpc_server.py')
 }
 
+function getModelsDir(): string {
+  // models/ 目录：dev 时在项目根，packaged 时在 extraResources
+  if (app.isPackaged) {
+    return join(process.resourcesPath, 'models')
+  }
+  return join(__dirname, '..', '..', 'models')
+}
+
 function getPythonDir(): string {
   return getBundledPythonDir()
 }
@@ -273,9 +281,20 @@ function startPythonServer() {
     ? join(pythonExeDir, 'python.exe')
     : join(pythonExeDir, 'bin', 'python')
 
+  // 设置模型缓存路径，让 Python 优先从 bundled models/ 加载
+  const modelsDir = getModelsDir()
+  const modelCacheDir = join(modelsDir, 'hub')
+  const torchHubDir = join(modelsDir, 'torch', 'hub')
+
   pythonProcess = spawn(pythonCmd, [pythonScript, `--data-dir=${app.getPath('userData')}`], {
     cwd: pythonDir,
-    stdio: ['pipe', 'pipe', 'pipe']
+    stdio: ['pipe', 'pipe', 'pipe'],
+    env: {
+      ...process.env,
+      // 让 modelscope 和 torch 从 bundled models/ 读取模型
+      'MODELSCOPE_CACHE': modelCacheDir,
+      'TORCH_HUB_DIR': torchHubDir,
+    }
   })
 
   let buffer = ''
@@ -434,6 +453,36 @@ ipcMain.handle('get_settings', () => {
 
 ipcMain.handle('show_item_in_folder', (_event, path: string) => {
   shell.showItemInFolder(path)
+})
+
+ipcMain.handle('get_old_recordings', async (_event, params: { days?: number }) => {
+  return new Promise((resolve, reject) => {
+    const id = nextRequestId++
+    const timeout = setTimeout(() => {
+      pendingRequests.delete(id)
+      reject(new Error('RPC call get_old_recordings timed out'))
+    }, 30000)
+    pendingRequests.set(id, {
+      resolve: (result) => { clearTimeout(timeout); resolve(result) },
+      reject: (err) => { clearTimeout(timeout); reject(err) }
+    })
+    sendToPython({ jsonrpc: '2.0', id, method: 'get_old_recordings', params: params || {} })
+  })
+})
+
+ipcMain.handle('cleanup_old_recordings', async (_event, params: { days?: number }) => {
+  return new Promise((resolve, reject) => {
+    const id = nextRequestId++
+    const timeout = setTimeout(() => {
+      pendingRequests.delete(id)
+      reject(new Error('RPC call cleanup_old_recordings timed out'))
+    }, 60000)
+    pendingRequests.set(id, {
+      resolve: (result) => { clearTimeout(timeout); resolve(result) },
+      reject: (err) => { clearTimeout(timeout); reject(err) }
+    })
+    sendToPython({ jsonrpc: '2.0', id, method: 'cleanup_old_recordings', params: params || {} })
+  })
 })
 
 // 禁用 GPU 加速，避免 macOS 上的崩溃问题

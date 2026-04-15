@@ -1,6 +1,6 @@
 {
   "name": "meeting-recorder",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "description": "本地离线会议录音转写工具",
   "main": "dist-electron/main.js",
   "scripts": {
@@ -56,6 +56,10 @@
       {
         "from": "bundled-python",
         "to": "bundled-python"
+      },
+      {
+        "from": "models",
+        "to": "models"
       },
       {
         "from": "resources",

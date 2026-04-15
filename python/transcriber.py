@@ -568,3 +568,85 @@ class TranscriptionService:
         c.execute('DELETE FROM segments_fts')
         conn.commit()
         conn.close()
+
+    def get_old_meetings(self, days: int = 30) -> Dict:
+        """获取超过指定天数的会议，用于清理预览"""
+        import time
+        cutoff = time.time() - days * 24 * 60 * 60
+        conn = sqlite3.connect(_get_db_path())
+        conn.row_factory = sqlite3.Row
+        c = conn.cursor()
+        c.execute('''
+            SELECT id, title, created_at, audio_path, file_size
+            FROM meetings
+            WHERE created_at < ? AND favorite = 0
+            ORDER BY created_at ASC
+        ''', (cutoff,))
+        rows = c.fetchall()
+        conn.close()
+
+        total_size = 0
+        file_count = 0
+        for row in rows:
+            if row['audio_path'] and os.path.exists(row['audio_path']):
+                try:
+                    total_size += os.path.getsize(row['audio_path'])
+                    file_count += 1
+                except:
+                    pass
+
+        return {
+            'meetings': [dict(r) for r in rows],
+            'count': len(rows),
+            'fileCount': file_count,
+            'totalBytes': total_size,
+        }
+
+    def cleanup_old_recordings(self, days: int = 30) -> Dict:
+        """删除超过指定天数的录音文件和对应的 DB 记录（排除收藏）"""
+        import time
+        cutoff = time.time() - days * 24 * 60 * 60
+        conn = sqlite3.connect(_get_db_path())
+        c = conn.cursor()
+
+        c.execute('''
+            SELECT id, audio_path FROM meetings
+            WHERE created_at < ? AND favorite = 0
+        ''', (cutoff,))
+        rows = c.fetchall()
+
+        deleted_files = 0
+        deleted_records = 0
+        freed_bytes = 0
+
+        for row in rows:
+            meeting_id = row['id']
+            audio_path = row['audio_path']
+
+            # 删除音频文件
+            if audio_path and os.path.exists(audio_path):
+                try:
+                    freed_bytes += os.path.getsize(audio_path)
+                    os.remove(audio_path)
+                    deleted_files += 1
+                except Exception as e:
+                    print(f'Failed to delete audio file {audio_path}: {e}', file=sys.stderr)
+
+            # 删除 DB 记录（触发 CASCADE）
+            c.execute('SELECT id FROM segments WHERE meeting_id = ?', (meeting_id,))
+            segment_ids = [r[0] for r in c.fetchall()]
+            for sid in segment_ids:
+                c.execute('DELETE FROM segments_fts WHERE segment_id = ?', (sid,))
+            c.execute('DELETE FROM segments WHERE meeting_id = ?', (meeting_id,))
+            c.execute('DELETE FROM speakers WHERE meeting_id = ?', (meeting_id,))
+            c.execute('DELETE FROM meetings WHERE id = ?', (meeting_id,))
+            deleted_records += 1
+
+        conn.commit()
+        conn.close()
+
+        return {
+            'deletedFiles': deleted_files,
+            'deletedRecords': deleted_records,
+            'freedBytes': freed_bytes,
+        }

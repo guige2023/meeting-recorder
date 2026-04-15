@@ -236,6 +236,12 @@ def handle_request(method, params, rpc_id):
         elif method == 'clear_data':
             transcription_service.clear_all_data()
             return {'status': 'cleared'}
+        elif method == 'get_old_recordings':
+            days = params.get('days', 30)
+            return transcription_service.get_old_meetings(days=days)
+        elif method == 'cleanup_old_recordings':
+            days = params.get('days', 30)
+            return transcription_service.cleanup_old_recordings(days=days)
         elif method == 'batch_export_meetings':
             ids = params.get('ids', [])
             formats = set(params.get('formats', ['json']))
