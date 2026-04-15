@@ -21,6 +21,7 @@ export default function HistoryView() {
   const [filterTimeRange, setFilterTimeRange] = useState<DateRange>('all')
   const [filterFavorites, setFilterFavorites] = useState<boolean | null>(null)
   const [filterSpeakerCount, setFilterSpeakerCount] = useState<number | null>(null)
+  const [filterMonth, setFilterMonth] = useState<string>('all') // 'YYYY-MM' or 'all'
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<MeetingDetail | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
@@ -32,6 +33,23 @@ export default function HistoryView() {
 
   useEffect(() => { fetchMeetings() }, [])
 
+  // 计算可用月份列表（从所有 meetings 提取， newest first）
+  const availableMonths = [...new Set(
+    meetings.map(m => {
+      const d = new Date(m.createdAt)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+    })
+  )].sort().reverse()
+
+  // 按月份预过滤（月份筛选独立于全文搜索，月份内再做关键词过滤）
+  const monthMeetings = filterMonth === 'all'
+    ? meetings
+    : meetings.filter(m => {
+      const d = new Date(m.createdAt)
+      const mKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+      return mKey === filterMonth
+    })
+
   const buildFilters = useCallback((): SearchFilters => ({
     query: searchQuery.trim() || undefined,
     dateRange: filterTimeRange,
@@ -41,9 +59,9 @@ export default function HistoryView() {
 
   useEffect(() => {
     if (!searchQuery && filterTimeRange === 'all' && filterFavorites === null && filterSpeakerCount === null) {
-      setDisplayMeetings(meetings)
+      setDisplayMeetings(monthMeetings)
     }
-  }, [meetings, searchQuery, filterTimeRange, filterFavorites, filterSpeakerCount])
+  }, [meetings, searchQuery, filterTimeRange, filterFavorites, filterSpeakerCount, filterMonth])
 
   useEffect(() => {
     const timer = setTimeout(async () => {
@@ -52,14 +70,22 @@ export default function HistoryView() {
       if (hasFilters) {
         setSearchHighlight(searchQuery.trim())
         const results = await searchMeetings(filters)
-        setDisplayMeetings(results)
+        // 进一步按月份过滤（月份筛选独立于后端全文搜索）
+        const monthFiltered = filterMonth === 'all'
+          ? results
+          : results.filter((m) => {
+            const d = new Date(m.createdAt)
+            const mKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
+            return mKey === filterMonth
+          })
+        setDisplayMeetings(monthFiltered)
       } else {
         setSearchHighlight('')
         await fetchMeetings()
       }
     }, 300)
     return () => clearTimeout(timer)
-  }, [searchQuery, filterTimeRange, filterFavorites, filterSpeakerCount])
+  }, [searchQuery, filterTimeRange, filterFavorites, filterSpeakerCount, filterMonth])
 
   const handleMeetingClick = async (id: string) => {
     if (id === selectedId) { setSelectedId(null); setDetail(null); return }
@@ -167,17 +193,69 @@ export default function HistoryView() {
             </button>
           ))}
         </div>
-        {(searchQuery || filterTimeRange !== 'all' || filterFavorites !== null || filterSpeakerCount !== null) && (
-          <button onClick={() => { setSearchQuery(''); setFilterTimeRange('all'); setFilterFavorites(null); setFilterSpeakerCount(null) }}
+        {(searchQuery || filterTimeRange !== 'all' || filterFavorites !== null || filterSpeakerCount !== null || filterMonth !== 'all') && (
+          <button onClick={() => { setSearchQuery(''); setFilterTimeRange('all'); setFilterFavorites(null); setFilterSpeakerCount(null); setFilterMonth('all') }}
             className="px-3 py-2.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors flex items-center gap-1">
             <X size={14} /> 清除筛选
           </button>
         )}
       </div>
 
+      {/* Month tab bar — like a file manager */}
+      {availableMonths.length > 0 && (
+        <div className="flex items-center gap-1 mb-4 overflow-x-auto pb-1 scrollbar-thin">
+          <button
+            onClick={() => setFilterMonth('all')}
+            className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              filterMonth === 'all'
+                ? 'bg-primary-500 text-white shadow-sm'
+                : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+            }`}
+          >
+            全部
+          </button>
+          {availableMonths.map(month => {
+            const [year, monthNum] = month.split('-')
+            const label = `${year}年${parseInt(monthNum)}月`
+            const count = meetings.filter(m => {
+              const d = new Date(m.createdAt)
+              return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === month
+            }).length
+            return (
+              <button
+                key={month}
+                onClick={() => setFilterMonth(month)}
+                className={`flex-shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 ${
+                  filterMonth === month
+                    ? 'bg-primary-500 text-white shadow-sm'
+                    : 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'
+                }`}
+              >
+                {label}
+                <span className={`text-xs px-1 rounded-full ${
+                  filterMonth === month
+                    ? 'bg-primary-400/40 text-white'
+                    : 'bg-gray-200 dark:bg-gray-700 text-gray-400 dark:text-gray-500'
+                }`}>
+                  {count}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
       {/* Batch export toolbar */}
       <div className="flex items-center justify-between mb-3">
-        <span className="text-sm text-gray-500 dark:text-gray-400">{displayMeetings.length} 个会议</span>
+        <span className="text-sm text-gray-500 dark:text-gray-400">
+          {filterMonth !== 'all' ? (
+            <>
+              {filterMonth.split('-')[0]}年{parseInt(filterMonth.split('-')[1])}月 · {displayMeetings.length} 个会议
+            </>
+          ) : (
+            <>{displayMeetings.length} 个会议</>
+          )}
+        </span>
         <div className="flex items-center gap-2">
           {displayMeetings.length > 0 && (
             <>
