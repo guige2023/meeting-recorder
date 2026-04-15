@@ -37,7 +37,9 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
     try {
       const result = await window.electronAPI.pythonCall('capture_start', {
         sampleRate: 16000,
-        channels: 1
+        channels: 1,
+        realtime: true,  // 启用实时字幕 VAD + ASR
+        language: 'zh'
       })
       set({
         status: 'recording',
