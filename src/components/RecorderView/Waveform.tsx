@@ -1,15 +1,21 @@
 import { useRef, useEffect } from 'react'
 import { useRecorderStore } from '@/stores/recorderStore'
 
+const BARS = 64
+const HISTORY_SEC = 3  // 3秒历史
+
 export default function Waveform() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const animationRef = useRef<number>()
+  const historyRef = useRef<number[]>(new Array(HISTORY_SEC * 10).fill(0))
+  const lastLevelRef = useRef(0)
+  const frameCountRef = useRef(0)
+
   const { audioLevel, status } = useRecorderStore()
 
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-
     const ctx = canvas.getContext('2d')
     if (!ctx) return
 
@@ -19,7 +25,6 @@ export default function Waveform() {
       canvas.height = rect.height * window.devicePixelRatio
       ctx.scale(window.devicePixelRatio, window.devicePixelRatio)
     }
-
     resize()
     window.addEventListener('resize', resize)
 
@@ -30,33 +35,70 @@ export default function Waveform() {
 
       ctx.clearRect(0, 0, width, height)
 
-      // 绘制波形
-      const bars = 60
-      const barWidth = (width - bars * 2) / bars
+      const barWidth = width / BARS
       const centerY = height / 2
 
-      for (let i = 0; i < bars; i++) {
-        // 生成随机但稳定的高度，基于 audioLevel
-        const baseHeight = audioLevel * height * 0.8 * (0.3 + Math.random() * 0.7)
-        const barHeight = Math.max(4, baseHeight)
-
-        const x = i * (barWidth + 2)
-        const y = centerY - barHeight / 2
-
-        // 渐变色
-        const gradient = ctx.createLinearGradient(0, y, 0, y + barHeight)
-        if (status === 'recording') {
-          gradient.addColorStop(0, '#0ea5e9')
-          gradient.addColorStop(1, '#0369a1')
-        } else {
-          gradient.addColorStop(0, '#d1d5db')
-          gradient.addColorStop(1, '#9ca3af')
+      if (status === 'recording') {
+        // 将新音量推入历史缓冲区
+        historyRef.current.push(audioLevel)
+        if (historyRef.current.length > HISTORY_SEC * 10) {
+          historyRef.current.shift()
         }
 
-        ctx.fillStyle = gradient
-        ctx.beginPath()
-        ctx.roundRect(x, y, barWidth, barHeight, barWidth / 2)
-        ctx.fill()
+        const history = historyRef.current
+        for (let i = 0; i < BARS; i++) {
+          // 从历史缓冲区取对应位置的值（ newest 在右边）
+          const histIdx = Math.floor((i / BARS) * history.length)
+          const level = history[Math.min(histIdx, history.length - 1)] || 0
+
+          // 平滑插值避免跳变
+          const smooth = lastLevelRef.current * 0.3 + level * 0.7
+          lastLevelRef.current = smooth
+
+          const maxBarH = height * 0.85
+          const barH = Math.max(4, smooth * maxBarH)
+          const x = i * barWidth
+          const y = centerY - barH / 2
+
+          const gradient = ctx.createLinearGradient(0, y, 0, y + barH)
+          gradient.addColorStop(0, '#0ea5e9')
+          gradient.addColorStop(1, '#0369a1')
+
+          ctx.fillStyle = gradient
+          ctx.beginPath()
+          ctx.roundRect(x + 1, y, barWidth - 2, barH, (barWidth - 2) / 2)
+          ctx.fill()
+        }
+      } else if (status === 'paused') {
+        // 暂停：显示最后一条波形的淡化静态版本
+        const history = historyRef.current
+        const last = history.length > 0 ? history[history.length - 1] : 0
+        for (let i = 0; i < BARS; i++) {
+          const histIdx = Math.floor((i / BARS) * history.length)
+          const level = history[Math.min(histIdx, history.length - 1)] || 0
+          const barH = Math.max(4, level * height * 0.85 * 0.4)
+          const x = i * barWidth
+          const y = centerY - barH / 2
+          ctx.fillStyle = '#9ca3af'
+          ctx.beginPath()
+          ctx.roundRect(x + 1, y, barWidth - 2, barH, (barWidth - 2) / 2)
+          ctx.fill()
+        }
+      } else {
+        // 空闲：呼吸式静态波形（低幅）
+        frameCountRef.current += 1
+        for (let i = 0; i < BARS; i++) {
+          const phase = (i / BARS) * Math.PI * 2
+          const t = frameCountRef.current / 30
+          const breath = 0.08 + Math.sin(t + phase) * 0.05
+          const barH = Math.max(4, breath * height)
+          const x = i * barWidth
+          const y = centerY - barH / 2
+          ctx.fillStyle = '#d1d5db'
+          ctx.beginPath()
+          ctx.roundRect(x + 1, y, barWidth - 2, barH, (barWidth - 2) / 2)
+          ctx.fill()
+        }
       }
 
       animationRef.current = requestAnimationFrame(draw)
@@ -66,9 +108,7 @@ export default function Waveform() {
 
     return () => {
       window.removeEventListener('resize', resize)
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current)
-      }
+      if (animationRef.current) cancelAnimationFrame(animationRef.current)
     }
   }, [audioLevel, status])
 
