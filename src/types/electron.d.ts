@@ -21,7 +21,7 @@ interface RealtimeCaptionData {
 }
 
 interface EnvNoticeData {
-  type: 'info' | 'warning' | 'error'
+  type: 'info' | 'warning' | 'error' | 'installing' | 'success'
   message: string
 }
 

@@ -187,6 +187,74 @@ function registerGlobalShortcuts() {
   }
 }
 
+/**
+ * 检查 Python 依赖是否完整，缺失则自动 pip install。
+ * 检查通过后调用 startPythonServer()。
+ */
+function ensurePythonDeps() {
+  const pythonDir = getPythonDir()
+  const reqPath = join(pythonDir, 'requirements.txt')
+  const pythonCmd = process.platform === 'win32' ? 'python' : 'python3'
+
+  // 快速检查：尝试 import 核心包
+  const checkProc = spawn(pythonCmd, [
+    '-c',
+    'import sounddevice; import funasr; print("OK")'
+  ], { stdio: ['pipe', 'pipe', 'pipe'] })
+
+  let checkOut = ''
+  checkProc.stdout?.on('data', (d) => { checkOut += d.toString() })
+  checkProc.stderr?.on('data', (d) => { /* swallow pip download noise during check */ })
+
+  checkProc.on('close', (code) => {
+    if (code === 0 && checkOut.trim() === 'OK') {
+      // 依赖已满足，直接启动
+      startPythonServer()
+      return
+    }
+
+    // 依赖缺失，开始 pip install
+    console.log('[deps] Python packages missing, running pip install...')
+    mainWindow?.webContents.send('env_notice', {
+      message: '首次启动正在安装 Python 依赖，请稍候...',
+      type: 'installing'
+    })
+
+    const pipProc = spawn(pythonCmd, [
+      '-m', 'pip', 'install', '-r', reqPath, '--quiet'
+    ], {
+      cwd: pythonDir,
+      stdio: ['pipe', 'pipe', 'pipe']
+    })
+
+    pipProc.stderr?.on('data', (data: Buffer) => {
+      const text = data.toString()
+      // 发送 pip 下载进度到渲染层（模型下载进度通道复用）
+      if (text.includes('Downloading') || text.includes('Fetching') || text.includes('%') || text.includes('Installing')) {
+        mainWindow?.webContents.send('model_download', { message: text.trim() })
+      }
+    })
+
+    pipProc.on('close', (pipCode) => {
+      if (pipCode === 0) {
+        console.log('[deps] pip install completed successfully')
+        mainWindow?.webContents.send('env_notice', {
+          message: 'Python 依赖安装完成',
+          type: 'success'
+        })
+        // 稍等片刻让新安装的包可以被 import
+        setTimeout(() => startPythonServer(), 2000)
+      } else {
+        console.error('[deps] pip install failed with code:', pipCode)
+        mainWindow?.webContents.send('env_notice', {
+          message: `Python 依赖安装失败（错误码 ${pipCode}），请手动运行：pip3 install -r "${reqPath}"`,
+          type: 'error'
+        })
+      }
+    })
+  })
+}
+
 function startPythonServer() {
   const pythonScript = getPythonPath()
   const pythonDir = getPythonDir()
@@ -371,7 +439,7 @@ app.whenReady().then(() => {
   createWindow()
   createTray()
   registerGlobalShortcuts()
-  startPythonServer()
+  ensurePythonDeps()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {

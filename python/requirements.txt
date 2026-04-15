@@ -7,6 +7,7 @@ numpy>=1.24.0
 
 # Transcription
 funasr>=1.0.0
+torchaudio>=0.8.0
 
 # Audio file I/O
 soundfile>=0.12.0

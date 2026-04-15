@@ -17,6 +17,7 @@ function App() {
   const [showOnboarding, setShowOnboarding] = useState(false)
   const [envError, setEnvError] = useState<string | null>(null)
   const [modelDownload, setModelDownload] = useState<string | null>(null)
+  const [installMessage, setInstallMessage] = useState<string | null>(null)
   const [pythonReady, setPythonReady] = useState(false)
 
   useEffect(() => {
@@ -58,9 +59,13 @@ function App() {
       }
     })
 
-    // 环境通知
+    // 环境通知（pip install 进度 / 安装结果）
     window.electronAPI.onEnvNotice((data) => {
-      if (data.type === 'warning' || data.type === 'error') {
+      if (data.type === 'installing') {
+        setInstallMessage(data.message)
+      } else if (data.type === 'success') {
+        setInstallMessage(null)
+      } else if (data.type === 'warning' || data.type === 'error') {
         setEnvError(data.message)
       }
     })
@@ -150,8 +155,14 @@ function App() {
             <div className="w-10 h-10 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
             <div className="text-center">
               <p className="text-gray-700 dark:text-gray-200 font-medium">正在启动录音服务...</p>
-              <p className="text-sm text-gray-400 mt-1">
-                {modelDownload ? modelDownload.slice(-80) : '初始化 Python 环境'}
+              <p className="text-sm mt-1">
+                {modelDownload ? (
+                  <span className="text-blue-500">{modelDownload.slice(-80)}</span>
+                ) : installMessage ? (
+                  <span className="text-yellow-600 dark:text-yellow-400">{installMessage}</span>
+                ) : (
+                  <span className="text-gray-400">初始化 Python 环境</span>
+                )}
               </p>
             </div>
           </div>
