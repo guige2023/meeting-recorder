@@ -10,6 +10,18 @@ import os
 import threading
 import traceback
 import subprocess
+import zipfile
+import tempfile
+import datetime as dt
+
+def _fmt_ss(seconds):
+    m = int(seconds // 60); s = int(seconds % 60)
+    return f'{m}:{s:02d}'
+
+def _fmt_srt(seconds):
+    h = int(seconds // 3600); m = int((seconds % 3600) // 60)
+    s = int(seconds % 60); ms = int((seconds % 1) * 1000)
+    return f'{h:02d}:{m:02d}:{s:02d},{ms:03d}'
 
 # 检查依赖
 def check_dependencies():
@@ -193,6 +205,79 @@ def handle_request(method, params, rpc_id):
         elif method == 'clear_data':
             transcription_service.clear_all_data()
             return {'status': 'cleared'}
+        elif method == 'batch_export_meetings':
+            ids = params.get('ids', [])
+            formats = set(params.get('formats', ['json']))
+            include_audio = params.get('include_audio', False)
+
+            tmp = tempfile.gettempdir()
+            ts = dt.datetime.now().strftime('%Y%m%d_%H%M%S')
+            zip_path = os.path.join(tmp, f'meeting_export_{ts}.zip')
+
+            with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+                for mid in ids:
+                    detail = transcription_service.get_meeting_detail(mid)
+                    if not detail:
+                        continue
+
+                    title = detail.get('meeting', {}).get('title', mid)
+                    safe = ''.join(c if c.isalnum() or c in ' -_' else '_' for c in title)
+                    base = safe
+
+                    sp_map = {sid: sp.get('name', f'Speaker {sid}')
+                              for sid, sp in detail.get('speakers', {}).items()}
+                    segments = detail.get('segments', [])
+
+                    if 'txt' in formats:
+                        lines = [title, '=' * 40, '']
+                        for seg in segments:
+                            sp = sp_map.get(seg.get('speakerId', ''), '未知')
+                            start = _fmt_ss(seg.get('startTime', 0))
+                            lines.append(f'[{start}] {sp}: {seg.get("text", "")}')
+                        zf.writestr(f'{base}/{base}.txt', '\n'.join(lines))
+
+                    if 'md' in formats:
+                        lines = [f'# {title}', '']
+                        cur = None
+                        for seg in segments:
+                            sp = sp_map.get(seg.get('speakerId', ''), '未知')
+                            if sp != cur:
+                                lines.extend(['', f'## {sp}', '']); cur = sp
+                            start = _fmt_ss(seg.get('startTime', 0))
+                            lines.append(f'> [{start}] {seg.get("text", "")}')
+                        zf.writestr(f'{base}/{base}.md', '\n'.join(lines))
+
+                    if 'json' in formats:
+                        export_data = {
+                            'version': '1.0',
+                            'meeting': detail.get('meeting', {}),
+                            'speakers': detail.get('speakers', {}),
+                            'segments': segments,
+                            'notes': detail.get('notes', []),
+                            'stats': detail.get('stats', {}),
+                            'exportedAt': dt.datetime.now().isoformat(),
+                        }
+                        zf.writestr(f'{base}/{base}.json',
+                                    json.dumps(export_data, ensure_ascii=False, indent=2))
+
+                    if 'srt' in formats:
+                        srt_lines = []
+                        for i, seg in enumerate(segments, 1):
+                            s = seg.get('startTime', 0)
+                            e = seg.get('endTime', s + 1)
+                            sp = sp_map.get(seg.get('speakerId', ''), '未知')
+                            srt_lines.append(
+                                f'{i}\n{_fmt_srt(s)} --> {_fmt_srt(e)}\n[{sp}] {seg.get("text","")}\n')
+                        zf.writestr(f'{base}/{base}.srt', '\n'.join(srt_lines))
+
+                    if include_audio:
+                        audio_path = (detail.get('meeting', {}).get('audioPath')
+                                      or detail.get('audioPath'))
+                        if audio_path and os.path.exists(audio_path):
+                            with open(audio_path, 'rb') as f:
+                                zf.writestr(f'{base}/{base}.wav', f.read())
+
+            return {'zipPath': zip_path}
         else:
             return {'error': f'Unknown method: {method}'}
     except Exception as e:
