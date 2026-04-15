@@ -37,6 +37,7 @@ export default function Waveform() {
 
       const barWidth = width / BARS
       const centerY = height / 2
+      const isDark = document.documentElement.classList.contains('dark')
 
       if (status === 'recording') {
         // 将新音量推入历史缓冲区
@@ -47,11 +48,10 @@ export default function Waveform() {
 
         const history = historyRef.current
         for (let i = 0; i < BARS; i++) {
-          // 从历史缓冲区取对应位置的值（ newest 在右边）
           const histIdx = Math.floor((i / BARS) * history.length)
           const level = history[Math.min(histIdx, history.length - 1)] || 0
 
-          // 平滑插值避免跳变
+          // EMA 平滑
           const smooth = lastLevelRef.current * 0.3 + level * 0.7
           lastLevelRef.current = smooth
 
@@ -61,8 +61,9 @@ export default function Waveform() {
           const y = centerY - barH / 2
 
           const gradient = ctx.createLinearGradient(0, y, 0, y + barH)
-          gradient.addColorStop(0, '#0ea5e9')
-          gradient.addColorStop(1, '#0369a1')
+          // 深色模式下用亮蓝，浅色用标准蓝
+          gradient.addColorStop(0, isDark ? '#38bdf8' : '#0ea5e9')
+          gradient.addColorStop(1, isDark ? '#0284c7' : '#0369a1')
 
           ctx.fillStyle = gradient
           ctx.beginPath()
@@ -70,16 +71,14 @@ export default function Waveform() {
           ctx.fill()
         }
       } else if (status === 'paused') {
-        // 暂停：显示最后一条波形的淡化静态版本
         const history = historyRef.current
-        const last = history.length > 0 ? history[history.length - 1] : 0
         for (let i = 0; i < BARS; i++) {
           const histIdx = Math.floor((i / BARS) * history.length)
           const level = history[Math.min(histIdx, history.length - 1)] || 0
           const barH = Math.max(4, level * height * 0.85 * 0.4)
           const x = i * barWidth
           const y = centerY - barH / 2
-          ctx.fillStyle = '#9ca3af'
+          ctx.fillStyle = isDark ? '#4b5563' : '#9ca3af'
           ctx.beginPath()
           ctx.roundRect(x + 1, y, barWidth - 2, barH, (barWidth - 2) / 2)
           ctx.fill()
@@ -94,7 +93,7 @@ export default function Waveform() {
           const barH = Math.max(4, breath * height)
           const x = i * barWidth
           const y = centerY - barH / 2
-          ctx.fillStyle = '#d1d5db'
+          ctx.fillStyle = isDark ? '#374151' : '#d1d5db'
           ctx.beginPath()
           ctx.roundRect(x + 1, y, barWidth - 2, barH, (barWidth - 2) / 2)
           ctx.fill()

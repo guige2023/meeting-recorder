@@ -134,7 +134,7 @@ export default function HistoryView() {
       {/* Search and Filter */}
       <div className="flex flex-wrap gap-3 mb-6">
         <div className="flex-1 min-w-[200px] relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 dark:text-gray-500" size={20} />
           <input
             type="text"
             placeholder="搜索会议内容..."
@@ -169,7 +169,7 @@ export default function HistoryView() {
         </div>
         {(searchQuery || filterTimeRange !== 'all' || filterFavorites !== null || filterSpeakerCount !== null) && (
           <button onClick={() => { setSearchQuery(''); setFilterTimeRange('all'); setFilterFavorites(null); setFilterSpeakerCount(null) }}
-            className="px-3 py-2.5 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors flex items-center gap-1">
+            className="px-3 py-2.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors flex items-center gap-1">
             <X size={14} /> 清除筛选
           </button>
         )}
@@ -196,7 +196,7 @@ export default function HistoryView() {
               {batchSelectedIds.size > 0 && (
                 <button
                   onClick={() => setBatchModalOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors"
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary-500 hover:bg-primary-600 text-white dark:bg-primary-600 dark:hover:bg-primary-700 rounded-lg transition-colors"
                 >
                   ↓ 批量导出 ({batchSelectedIds.size})
                 </button>
@@ -209,7 +209,7 @@ export default function HistoryView() {
       {/* Meeting List */}
       <div className="flex-1 overflow-y-auto space-y-3">
         {loading ? <div className="text-center py-12 text-gray-400">加载中...</div>
-         : displayMeetings.length === 0 ? <div className="text-center py-12 text-gray-400">
+         : displayMeetings.length === 0 ? <div className="text-center py-12 text-gray-400 dark:text-gray-500">
             {searchQuery || filterFavorites !== null || filterSpeakerCount !== null || filterTimeRange !== 'all' ? '没有找到匹配的会议' : '暂无会议记录'}
            </div>
          : displayMeetings.map(meeting => (
@@ -230,14 +230,14 @@ export default function HistoryView() {
                       })
                     }}
                     onClick={e => e.stopPropagation()}
-                    className="mt-1 w-4 h-4 rounded border-gray-300 text-primary-500 cursor-pointer flex-shrink-0"
+                    className="mt-1 w-4 h-4 rounded border-gray-300 dark:border-gray-600 text-primary-500 cursor-pointer flex-shrink-0"
                   />
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2 flex-wrap">
                       <h3 className="font-medium text-gray-900 dark:text-white">{highlightText(meeting.title, searchHighlight)}</h3>
                       {getStatusBadge(meeting.status, meeting.id)}
                       {meeting.favorite && <Star size={14} className="text-yellow-500 fill-yellow-500" />}
-                      <ChevronRight size={16} className={`text-gray-400 transition-transform ml-auto ${selectedId === meeting.id ? 'rotate-90' : ''}`} />
+                      <ChevronRight size={16} className={`text-gray-400 dark:text-gray-500 transition-transform ml-auto ${selectedId === meeting.id ? 'rotate-90' : ''}`} />
                     </div>
                     <div className="flex items-center gap-4 text-sm text-gray-500 dark:text-gray-400">
                       <span className="flex items-center gap-1"><Calendar size={14} />{formatDate(meeting.createdAt)}</span>
@@ -256,7 +256,7 @@ export default function HistoryView() {
                   </div>
                   <div className="flex items-center gap-1" onClick={e => e.stopPropagation()}>
                     <button onClick={() => toggleFavorite(meeting.id)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg">
-                      <Star size={18} className={meeting.favorite ? 'text-yellow-500 fill-yellow-500' : 'text-gray-400'} />
+                      <Star size={18} className={meeting.favorite ? 'text-yellow-500 fill-yellow-500' : 'text-gray-400 dark:text-gray-500'} />
                     </button>
                     <button onClick={() => deleteMeeting(meeting.id)} className="p-2 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-gray-400 hover:text-red-500">
                       <Trash2 size={18} />
@@ -267,11 +267,11 @@ export default function HistoryView() {
 
               {selectedId === meeting.id && (
                 <div className="bg-white dark:bg-gray-800 rounded-xl mt-2 p-4 border border-gray-100 dark:border-gray-700 shadow-sm">
-                  {loadingDetail ? <div className="text-center py-8 text-gray-400">加载转写内容...</div>
+                  {loadingDetail ? <div className="text-center py-8 text-gray-400 dark:text-gray-500">加载转写内容...</div>
                    : detail ? <MeetingDetailView detail={detail} segmentsBySpeaker={segmentsBySpeaker}
                         formatTime={formatTime} copyToClipboard={copyToClipboard} copiedId={copiedId}
                         searchHighlight={searchHighlight} formatDuration={formatDuration} />
-                   : <div className="text-center py-8 text-gray-400">{meeting.status === 'processing' ? 'AI 正在处理中，请稍候...' : '暂无转写内容'}</div>}
+                   : <div className="text-center py-8 text-gray-400">{meeting.status === 'processing' ? 'AI 正在处理中，请稍候...' : '暂无转写内容'} dark:text-gray-500</div>}
                 </div>
               )}
             </div>
@@ -337,7 +337,7 @@ function MeetingDetailView({
   const [showAudioPlayer, setShowAudioPlayer] = useState(false)
   const { updateMeeting, updateSpeaker } = useMeetingStore()
 
-  if (detail.segments.length === 0) return <div className="text-center py-8 text-gray-400">暂无转写内容</div>
+  if (detail.segments.length === 0) return <div className="text-center py-8 text-gray-400 dark:text-gray-500">暂无转写内容</div>
 
   const displaySegments = activeSpeaker ? segmentsBySpeaker[activeSpeaker] || [] : detail.segments
 
@@ -466,7 +466,7 @@ function MeetingDetailView({
                         className="flex-1 px-2 py-0.5 text-xs border border-gray-200 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
                         autoFocus onKeyDown={e => { if (e.key === 'Enter') handleSaveSpeakerName() }} />
                       <button onClick={handleSaveSpeakerName} className="text-green-500"><Check size={12} /></button>
-                      <button onClick={() => setEditingSpeakerId(null)} className="text-gray-400"><X size={12} /></button>
+                      <button onClick={() => setEditingSpeakerId(null)} className="text-gray-400 dark:text-gray-500"><X size={12} /></button>
                     </div>
                   ) : (
                     <>
@@ -498,8 +498,8 @@ function MeetingDetailView({
         </button>
         {speakerList.map(sp => (
           <button key={sp.id} onClick={() => setActiveSpeaker(sp.id)}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-sm transition-colors ${activeSpeaker === sp.id ? 'text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
-            style={activeSpeaker === sp.id ? { backgroundColor: sp.color, color: '#fff' } : {}}>
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-sm transition-colors ${activeSpeaker === sp.id ? 'text-white shadow-sm' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+            style={activeSpeaker === sp.id ? { backgroundColor: sp.color } : {}}>
             <span className="w-2 h-2 rounded-full" style={{ backgroundColor: sp.color }} />
             {sp.name || sp.label}
           </button>
@@ -510,7 +510,7 @@ function MeetingDetailView({
       <div className="space-y-3 max-h-96 overflow-y-auto">
         {displaySegments.map(seg => (
           <div key={seg.id} className="flex gap-3 group">
-            <div className="text-xs text-gray-400 font-mono w-10 flex-shrink-0 pt-0.5">
+            <div className="text-xs text-gray-400 dark:text-gray-500 font-mono w-10 flex-shrink-0 pt-0.5">
               {formatTime(seg.startTime)}
             </div>
             <div className="w-1.5 rounded-full flex-shrink-0 mt-1" style={{ backgroundColor: seg.speakerColor || '#9ca3af' }} />
