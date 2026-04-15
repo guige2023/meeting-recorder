@@ -121,7 +121,7 @@ function App() {
           )}
           <div className={`w-2 h-2 rounded-full ${pythonReady ? 'bg-green-500' : 'bg-yellow-500'}`}
                title={pythonReady ? 'Python 就绪' : 'Python 初始化中...'} />
-          <span className="text-sm text-gray-400 dark:text-gray-500">v1.0.1</span>
+          <span className="text-sm text-gray-400 dark:text-gray-500">v1.0.2</span>
         </div>
       </header>
 
