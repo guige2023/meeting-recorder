@@ -65,11 +65,11 @@
     "mac": {
       "category": "public.app-category.productivity",
       "target": ["dmg"],
-      "icon": "resources/icon.png"
+      "icon": "resources/icon-512.png"
     },
     "win": {
       "target": ["nsis"],
-      "icon": "resources/icon.png"
+      "icon": "resources/icon.ico"
     },
     "nsis": {
       "oneClick": false,

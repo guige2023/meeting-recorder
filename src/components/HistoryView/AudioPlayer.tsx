@@ -1,202 +1,188 @@
-import { useRef, useState, useEffect, useCallback } from 'react'
-import { Play, Pause, Volume2, VolumeX } from 'lucide-react'
+import { useState, useRef, useEffect, useCallback } from 'react'
+import { Play, Pause, SkipBack, SkipForward } from 'lucide-react'
 
 interface AudioPlayerProps {
-  audioPath: string
+  src: string
   duration: number
-  onTimeUpdate?: (currentTime: number) => void
-  onPlayStateChange?: (isPlaying: boolean) => void
-  startTime?: number
+  segments: Array<{
+    id: string
+    startTime: number
+    endTime: number
+    text: string
+    speakerColor: string
+  }>
+  onSeek?: (time: number) => void
 }
 
-const SPEEDS = [0.5, 0.75, 1, 1.25, 1.5, 2]
-
-export default function AudioPlayer({
-  audioPath,
-  duration,
-  onTimeUpdate,
-  onPlayStateChange,
-  startTime,
-}: AudioPlayerProps) {
+export default function AudioPlayer({ src, duration, segments, onSeek }: AudioPlayerProps) {
   const audioRef = useRef<HTMLAudioElement>(null)
-  const [isPlaying, setIsPlaying] = useState(false)
+  const [playing, setPlaying] = useState(false)
   const [currentTime, setCurrentTime] = useState(0)
   const [playbackRate, setPlaybackRate] = useState(1)
-  const [isMuted, setIsMuted] = useState(false)
-  const [audioUrl, setAudioUrl] = useState<string>('')
-  const [isLoaded, setIsLoaded] = useState(false)
-
-  // Load audio URL
-  useEffect(() => {
-    if (!audioPath) return
-    window.electronAPI.getAudioUrl(audioPath).then(url => {
-      setAudioUrl(url)
-      setIsLoaded(true)
-    })
-  }, [audioPath])
-
-  // Seek when startTime changes
-  useEffect(() => {
-    if (startTime !== undefined && audioRef.current && isLoaded) {
-      audioRef.current.currentTime = startTime
-      setCurrentTime(startTime)
-    }
-  }, [startTime, isLoaded])
-
-  // Sync playback state
-  useEffect(() => {
-    onPlayStateChange?.(isPlaying)
-  }, [isPlaying, onPlayStateChange])
+  const [volume, setVolume] = useState(1)
+  const progressRef = useRef<HTMLDivElement>(null)
 
   const togglePlay = useCallback(() => {
-    const audio = audioRef.current
-    if (!audio) return
-    if (isPlaying) {
-      audio.pause()
+    if (!audioRef.current) return
+    if (playing) {
+      audioRef.current.pause()
     } else {
-      audio.play().catch(console.error)
+      audioRef.current.play()
     }
-    setIsPlaying(!isPlaying)
-  }, [isPlaying])
+    setPlaying(!playing)
+  }, [playing])
 
-  const handleTimeUpdate = useCallback(() => {
-    const audio = audioRef.current
-    if (!audio) return
-    setCurrentTime(audio.currentTime)
-    onTimeUpdate?.(audio.currentTime)
-  }, [onTimeUpdate])
-
-  const handleSeek = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const time = parseFloat(e.target.value)
-    if (audioRef.current) {
-      audioRef.current.currentTime = time
-    }
-    setCurrentTime(time)
-  }, [])
-
-  const handleSpeedChange = useCallback((speed: number) => {
-    setPlaybackRate(speed)
-    if (audioRef.current) {
-      audioRef.current.playbackRate = speed
-    }
-  }, [])
-
-  const toggleMute = useCallback(() => {
-    if (audioRef.current) {
-      audioRef.current.muted = !isMuted
-    }
-    setIsMuted(!isMuted)
-  }, [isMuted])
-
-  const formatTime = (seconds: number) => {
-    const h = Math.floor(seconds / 3600)
-    const m = Math.floor((seconds % 3600) / 60)
-    const s = Math.floor(seconds % 60)
-    if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
-    return `${m}:${s.toString().padStart(2, '0')}`
+  const handleTimeUpdate = () => {
+    if (!audioRef.current) return
+    setCurrentTime(audioRef.current.currentTime)
+    onSeek?.(audioRef.current.currentTime)
   }
 
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0
-
-  if (!isLoaded) {
-    return (
-      <div className="flex items-center justify-center h-14 bg-gray-50 rounded-lg text-sm text-gray-400">
-        加载音频中...
-      </div>
-    )
+  const handleProgressClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!progressRef.current || !audioRef.current) return
+    const rect = progressRef.current.getBoundingClientRect()
+    const ratio = (e.clientX - rect.left) / rect.width
+    const newTime = ratio * duration
+    audioRef.current.currentTime = newTime
+    setCurrentTime(newTime)
   }
+
+  const skip = (delta: number) => {
+    if (!audioRef.current) return
+    audioRef.current.currentTime = Math.max(0, Math.min(duration, audioRef.current.currentTime + delta))
+  }
+
+  const handleRateChange = () => {
+    const rates = [0.5, 0.75, 1, 1.25, 1.5, 2]
+    const idx = rates.indexOf(playbackRate)
+    const next = rates[(idx + 1) % rates.length]
+    setPlaybackRate(next)
+    if (audioRef.current) audioRef.current.playbackRate = next
+  }
+
+  // 找到当前时间对应的片段
+  const activeSegmentId = segments.find(
+    seg => currentTime >= seg.startTime && currentTime <= seg.endTime
+  )?.id
 
   return (
-    <div className="bg-gray-50 rounded-xl p-4">
-      {/* Hidden native audio element */}
+    <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
       <audio
         ref={audioRef}
-        src={audioUrl}
+        src={src}
         onTimeUpdate={handleTimeUpdate}
-        onEnded={() => setIsPlaying(false)}
-        onPlay={() => setIsPlaying(true)}
-        onPause={() => setIsPlaying(false)}
-        onLoadedMetadata={() => {
-          if (audioRef.current && startTime !== undefined) {
-            audioRef.current.currentTime = startTime
-          }
-        }}
+        onEnded={() => setPlaying(false)}
+        onLoadedMetadata={() => setCurrentTime(0)}
       />
 
-      {/* Controls row */}
-      <div className="flex items-center gap-3">
-        {/* Play/Pause */}
-        <button
-          onClick={togglePlay}
-          className="flex-shrink-0 w-10 h-10 flex items-center justify-center bg-gray-800 hover:bg-gray-700 text-white rounded-full transition-colors"
-        >
-          {isPlaying ? <Pause size={18} fill="white" /> : <Play size={18} fill="white" className="ml-0.5" />}
-        </button>
-
-        {/* Time display */}
-        <div className="text-xs text-gray-500 font-mono w-14 flex-shrink-0">
+      {/* 时间显示 */}
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-xs font-mono text-gray-500 dark:text-gray-400">
           {formatTime(currentTime)}
-        </div>
-
-        {/* Progress bar */}
-        <div className="flex-1 relative group">
-          <div className="h-1.5 bg-gray-200 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-primary-500 rounded-full transition-all"
-              style={{ width: `${progress}%` }}
-            />
-          </div>
-          <input
-            type="range"
-            min={0}
-            max={duration || 0}
-            step={0.1}
-            value={currentTime}
-            onChange={handleSeek}
-            className="absolute inset-0 w-full opacity-0 cursor-pointer"
-            style={{ top: 0, height: '100%' }}
-          />
-        </div>
-
-        {/* Duration */}
-        <div className="text-xs text-gray-400 font-mono w-14 flex-shrink-0 text-right">
+        </span>
+        <span className="text-xs font-mono text-gray-400 dark:text-gray-500">
           {formatTime(duration)}
-        </div>
-
-        {/* Speed selector */}
-        <div className="flex items-center gap-1 flex-shrink-0">
-          {SPEEDS.map(speed => (
-            <button
-              key={speed}
-              onClick={() => handleSpeedChange(speed)}
-              className={`px-1.5 py-0.5 text-xs rounded transition-colors ${
-                playbackRate === speed
-                  ? 'bg-gray-800 text-white'
-                  : 'text-gray-500 hover:bg-gray-200'
-              }`}
-            >
-              {speed}x
-            </button>
-          ))}
-        </div>
-
-        {/* Mute */}
-        <button
-          onClick={toggleMute}
-          className="flex-shrink-0 p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-200 rounded transition-colors"
-        >
-          {isMuted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-        </button>
+        </span>
       </div>
 
-      {/* Playback rate active indicator */}
-      {playbackRate !== 1 && (
-        <div className="mt-2 text-center">
-          <span className="text-xs text-primary-600 font-medium">
-            当前速度: {playbackRate}x
-          </span>
+      {/* 进度条 */}
+      <div
+        ref={progressRef}
+        className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full mb-4 cursor-pointer relative group"
+        onClick={handleProgressClick}
+      >
+        {/* 播放头 */}
+        <div
+          className="absolute top-0 left-0 h-full bg-primary-500 rounded-full transition-all"
+          style={{ width: `${duration > 0 ? (currentTime / duration) * 100 : 0}%` }}
+        />
+        <div
+          className="absolute top-1/2 -translate-y-1/2 w-3 h-3 bg-primary-500 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+          style={{ left: `calc(${duration > 0 ? (currentTime / duration) * 100 : 0}% - 6px)` }}
+        />
+
+        {/* 片段高亮 */}
+        {segments.map(seg => (
+          <div
+            key={seg.id}
+            className="absolute top-0 h-full opacity-20 rounded-full"
+            style={{
+              left: `${(seg.startTime / duration) * 100}%`,
+              width: `${((seg.endTime - seg.startTime) / duration) * 100}%`,
+              backgroundColor: seg.speakerColor || '#9ca3af'
+            }}
+          />
+        ))}
+      </div>
+
+      {/* 控制按钮 */}
+      <div className="flex items-center justify-center gap-4">
+        <button
+          onClick={() => skip(-10)}
+          className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-500 transition-colors"
+          title="后退 10 秒"
+        >
+          <SkipBack size={18} />
+        </button>
+
+        <button
+          onClick={togglePlay}
+          className="w-10 h-10 flex items-center justify-center bg-primary-500 hover:bg-primary-600 text-white rounded-full transition-colors"
+        >
+          {playing ? <Pause size={18} /> : <Play size={18} className="ml-0.5" />}
+        </button>
+
+        <button
+          onClick={() => skip(10)}
+          className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg text-gray-500 transition-colors"
+          title="前进 10 秒"
+        >
+          <SkipForward size={18} />
+        </button>
+
+        <div className="flex-1" />
+
+        {/* 播放速率 */}
+        <button
+          onClick={handleRateChange}
+          className="px-3 py-1 text-xs font-mono bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 rounded-lg transition-colors"
+        >
+          {playbackRate}x
+        </button>
+
+        {/* 音量 */}
+        <input
+          type="range"
+          min={0}
+          max={1}
+          step={0.1}
+          value={volume}
+          onChange={e => {
+            const v = parseFloat(e.target.value)
+            setVolume(v)
+            if (audioRef.current) audioRef.current.volume = v
+          }}
+          className="w-20 accent-primary-500"
+          title="音量"
+        />
+      </div>
+
+      {/* 当前播放片段高亮 */}
+      {activeSegmentId && (
+        <div className="mt-3 px-3 py-2 bg-primary-50 dark:bg-primary-900/20 rounded-lg border-l-2 border-primary-500">
+          <p className="text-sm text-primary-700 dark:text-primary-300">
+            {segments.find(s => s.id === activeSegmentId)?.text}
+          </p>
         </div>
       )}
     </div>
   )
+}
+
+function formatTime(seconds: number): string {
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  const s = Math.floor(seconds % 60)
+  if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
+  return `${m}:${s.toString().padStart(2, '0')}`
 }

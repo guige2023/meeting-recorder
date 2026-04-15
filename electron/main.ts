@@ -19,6 +19,7 @@ let pythonProcess: ChildProcess | null = null
 let pythonReady = false
 let pendingRequests = new Map<number, { resolve: (v: any) => void; reject: (e: any) => void }>()
 let nextRequestId = 1
+let isQuitting = false
 
 const isDev = process.env.NODE_ENV !== 'production' || !app.isPackaged
 
@@ -71,9 +72,9 @@ function createWindow() {
   }
 
   mainWindow.on('close', (event) => {
-    // 检查设置：是否最小化到托盘
+      // 检查设置：是否最小化到托盘
     const settings = getStoredSettings()
-    if (settings.minimizeToTray && !app.isQuitting) {
+    if (settings.minimizeToTray && !isQuitting) {
       event.preventDefault()
       mainWindow?.hide()
     }
@@ -144,8 +145,8 @@ function createTray() {
     {
       label: '退出',
       click: () => {
-        (app as any).isQuitting = true
-        app.quit()
+  isQuitting = true
+  app.quit()
       }
     }
   ])
@@ -311,6 +312,13 @@ ipcMain.handle('get_app_path', () => {
   return app.getPath('userData')
 })
 
+ipcMain.handle('get_audio_url', (_event, filePath: string) => {
+  if (!filePath) return ''
+  // 将本地路径转为 file:// URL
+  if (filePath.startsWith('file://')) return filePath
+  return `file://${encodeURIComponent(filePath)}`
+})
+
 ipcMain.handle('get_dark_mode', () => {
   return nativeTheme.shouldUseDarkColors
 })
@@ -352,7 +360,7 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
-  (app as any).isQuitting = true
+  isQuitting = true
   if (pythonProcess) {
     pythonProcess.kill()
   }

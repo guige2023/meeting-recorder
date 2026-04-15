@@ -66,10 +66,12 @@ def send_notification(method, params):
 from audio_capture import AudioCapture
 from transcriber import TranscriptionService
 from audio_converter import convert_to_wav, get_audio_info
+from realtime_transcriber import RealtimeTranscriberPool
 
 # 全局单例
 audio_capture = None
 transcription_service = None
+realtime_pool = None  # RealtimeTranscriberPool
 
 def handle_request(method, params, rpc_id):
     """处理 RPC 请求"""
