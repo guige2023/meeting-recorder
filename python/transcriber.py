@@ -1,6 +1,6 @@
 """
 转写服务模块
-整合：说话人分割（pyannote）+ 语音转写（SenseVoice）+ 结果合并
+整合：说话人分割（本地 Silero VAD）+ 语音转写（SenseVoice）+ 结果合并
 """
 
 import json
@@ -19,8 +19,7 @@ DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'meetings.db')
 
 class TranscriptionService:
     def __init__(self):
-        self.diarizer = None
-        self.transcriber = None
+        self.transcription_model = None
         self.models_loaded = False
         self._init_db()
 
@@ -97,7 +96,6 @@ class TranscriptionService:
             # 加载 SenseVoice（语音转写）
             try:
                 from funasr import AutoModel
-                # 检测 CUDA
                 import torch
                 device = 'cuda' if torch.cuda.is_available() else 'cpu'
                 self.transcription_model = AutoModel(
@@ -133,11 +131,6 @@ class TranscriptionService:
     def process_file(self, file_path: str, meeting_id: str = None, language: str = 'zh'):
         """
         处理音频文件：说话人分割 -> 转写 -> 合并结果
-
-        Args:
-            file_path: 音频文件路径
-            meeting_id: 会议 ID（可选）
-            language: 语言
         """
         import sys
 
@@ -170,7 +163,7 @@ class TranscriptionService:
 
         self._send_progress(meeting_id, 0.05, '正在加载模型...')
 
-        # 步骤1: 说话人分割（完全本地，不依赖外部 API）
+        # 步骤1: 说话人分割（完全本地）
         self._send_progress(meeting_id, 0.1, '正在识别说话人...')
         diarization_result = []
         try:
@@ -250,12 +243,8 @@ class TranscriptionService:
         diarization: List[Dict],
         transcription: List[Dict]
     ) -> List[Dict]:
-        """
-        合并说话人分割和转写结果
-        策略：对于每个转写片段，找到其时间段内主要的说话人
-        """
+        """合并说话人分割和转写结果"""
         if not diarization:
-            # 没有说话人分割结果，所有片段归为 "Speaker 1"
             return [
                 {**seg, 'speaker': 'SPEAKER_00', 'speaker_label': 'Speaker 1'}
                 for seg in transcription
@@ -276,7 +265,6 @@ class TranscriptionService:
                 d_start = dseg['start']
                 d_end = dseg['end']
 
-                # 计算重叠
                 overlap_start = max(t_start, d_start)
                 overlap_end = min(t_end, d_end)
                 overlap = max(0, overlap_end - overlap_start)
@@ -287,11 +275,9 @@ class TranscriptionService:
                         overlap_speakers[speaker] = 0
                     overlap_speakers[speaker] += overlap
 
-            # 选择重叠最多的说话人
             if overlap_speakers:
                 main_speaker = max(overlap_speakers.keys(), key=lambda s: overlap_speakers[s])
             else:
-                # 没有重叠，使用上一个说话人
                 main_speaker = merged[-1]['speaker'] if merged else 'SPEAKER_00'
 
             merged.append({
@@ -309,7 +295,6 @@ class TranscriptionService:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
 
-        # 获取唯一的说话人
         speakers = list(set(m['speaker'] for m in merged))
         speaker_colors = ['#0ea5e9', '#22c55e', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316']
         speaker_map = {}
@@ -322,7 +307,6 @@ class TranscriptionService:
                 VALUES (?, ?, ?, ?, ?)
             ''', (sp_id, meeting_id, sp, sp.replace('SPEAKER_', 'Speaker '), speaker_colors[i % len(speaker_colors)]))
 
-        # 保存转写片段
         for seg in merged:
             seg_id = str(uuid.uuid4())
             speaker_id = speaker_map.get(seg['speaker'])
@@ -330,14 +314,11 @@ class TranscriptionService:
                 INSERT INTO segments (id, meeting_id, speaker_id, start_time, end_time, text)
                 VALUES (?, ?, ?, ?, ?, ?)
             ''', (seg_id, meeting_id, speaker_id, seg['start'], seg['end'], seg['text']))
-
-            # 添加到 FTS 索引
             c.execute('''
                 INSERT INTO segments_fts (text, segment_id, meeting_id)
                 VALUES (?, ?, ?)
             ''', (seg['text'], seg_id, meeting_id))
 
-        # 更新说话人数量
         c.execute('''
             UPDATE meetings SET speaker_count = ? WHERE id = ?
         ''', (len(speakers), meeting_id))
@@ -374,12 +355,11 @@ class TranscriptionService:
         return {'meetings': meetings}
 
     def get_meeting_detail(self, meeting_id: str) -> Optional[Dict]:
-        """获取会议详情（含转写内容）"""
+        """获取会议详情（含转写内容 + 发言时长统计）"""
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
 
-        # 获取会议信息
         c.execute('SELECT * FROM meetings WHERE id = ?', (meeting_id,))
         meeting = c.fetchone()
         if not meeting:
@@ -392,13 +372,27 @@ class TranscriptionService:
 
         # 获取转写片段
         c.execute('''
-            SELECT s.*, sp.label as speaker_label, sp.name as speaker_name, sp.color as speaker_color
+            SELECT s.*, sp.label as speaker_label, sp.name as speaker_name,
+                   sp.color as speaker_color, sp.id as speaker_id
             FROM segments s
             LEFT JOIN speakers sp ON s.speaker_id = sp.id
             WHERE s.meeting_id = ?
             ORDER BY s.start_time
         ''', (meeting_id,))
         segments = [dict(row) for row in c.fetchall()]
+
+        # 计算每个说话人的总发言时长
+        speaker_durations: Dict[str, float] = {}
+        for seg in segments:
+            sp_id = seg.get('speaker_id')
+            if sp_id:
+                dur = seg['end_time'] - seg['start_time']
+                speaker_durations[sp_id] = speaker_durations.get(sp_id, 0) + dur
+
+        # 注入发言时长到 speaker 对象
+        for sp_id, dur in speaker_durations.items():
+            if sp_id in speakers:
+                speakers[sp_id]['total_duration'] = dur
 
         conn.close()
 
@@ -413,7 +407,6 @@ class TranscriptionService:
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
 
-        # 删除 FTS 索引
         c.execute('SELECT id FROM segments WHERE meeting_id = ?', (meeting_id,))
         segment_ids = [row[0] for row in c.fetchall()]
         for sid in segment_ids:
@@ -434,7 +427,7 @@ class TranscriptionService:
         conn.close()
 
     def update_meeting(self, meeting_id: str, updates: Dict):
-        """更新会议信息"""
+        """更新会议信息（标题、标签、备注）"""
         conn = sqlite3.connect(DB_PATH)
         c = conn.cursor()
 
@@ -454,22 +447,33 @@ class TranscriptionService:
             c.execute(f'UPDATE meetings SET {", ".join(set_clause)} WHERE id = ?', values)
             conn.commit()
 
+        # 更新说话人名称
+        if 'speakerNames' in updates:
+            for sp_id, name in updates['speakerNames'].items():
+                c.execute('UPDATE speakers SET name = ? WHERE id = ?', (name, sp_id))
+            conn.commit()
+
+        conn.close()
+
+    def update_speaker(self, speaker_id: str, updates: Dict):
+        """更新说话人信息（名称、颜色）"""
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        allowed = ['name', 'color']
+        set_clause = []
+        values = []
+        for k, v in updates.items():
+            if k in allowed:
+                set_clause.append(f'{k} = ?')
+                values.append(v)
+        if set_clause:
+            values.append(speaker_id)
+            c.execute(f'UPDATE speakers SET {", ".join(set_clause)} WHERE id = ?', values)
+            conn.commit()
         conn.close()
 
     def search_meetings(self, filters: Dict) -> List[Dict]:
-        """
-        多维过滤搜索会议内容
-
-        Args:
-            filters: {
-                query: str,           # FTS5 搜索关键词，可为空
-                dateRange: str,        # all|today|week|month|custom
-                customStart: int,      # dateRange=custom 时使用
-                customEnd: int,
-                favorites: bool|null,  # null=不限，true=仅收藏
-                speakerCount: int|null # null=不限，数字=最少该数量
-            }
-        """
+        """多维过滤搜索"""
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
@@ -477,23 +481,20 @@ class TranscriptionService:
         conditions = []
         params = []
 
-        # FTS5 关键词搜索
         query = filters.get('query', '')
         if query:
-            # FTS5 MATCH 查询
             fts_query = ' OR '.join([f'"{term}"*' for term in query.split() if term.strip()])
             if fts_query:
                 conditions.append('m.id IN (SELECT DISTINCT meeting_id FROM segments_fts WHERE segments_fts MATCH ?)')
                 params.append(fts_query)
 
-        # 日期范围过滤
         date_range = filters.get('dateRange', 'all')
         now_ts = datetime.now().timestamp()
         day_ms = 24 * 60 * 60
         if date_range == 'today':
-            start_of_day = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+            start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
             conditions.append('m.created_at >= ?')
-            params.append(start_of_day)
+            params.append(start)
         elif date_range == 'week':
             conditions.append('m.created_at >= ?')
             params.append(now_ts - 7 * day_ms)
@@ -501,34 +502,30 @@ class TranscriptionService:
             conditions.append('m.created_at >= ?')
             params.append(now_ts - 30 * day_ms)
         elif date_range == 'custom':
-            custom_start = filters.get('customStart')
-            custom_end = filters.get('customEnd')
-            if custom_start is not None:
+            cs = filters.get('customStart')
+            ce = filters.get('customEnd')
+            if cs is not None:
                 conditions.append('m.created_at >= ?')
-                params.append(custom_start)
-            if custom_end is not None:
+                params.append(cs)
+            if ce is not None:
                 conditions.append('m.created_at <= ?')
-                params.append(custom_end)
+                params.append(ce)
 
-        # 收藏过滤
-        favorites = filters.get('favorites')
-        if favorites is True:
+        favs = filters.get('favorites')
+        if favs is True:
             conditions.append('m.favorite = 1')
-        elif favorites is False:
+        elif favs is False:
             conditions.append('m.favorite = 0')
 
-        # 说话人数量过滤
-        speaker_count = filters.get('speakerCount')
-        if speaker_count is not None:
+        sc = filters.get('speakerCount')
+        if sc is not None:
             conditions.append('m.speaker_count >= ?')
-            params.append(speaker_count)
+            params.append(sc)
 
-        # 构建 SQL
         where_clause = ' AND '.join(conditions) if conditions else '1=1'
 
         c.execute(f'''
-            SELECT m.*
-            FROM meetings m
+            SELECT m.* FROM meetings m
             WHERE {where_clause}
             ORDER BY m.created_at DESC
         ''', params)
@@ -550,3 +547,14 @@ class TranscriptionService:
 
         conn.close()
         return meetings
+
+    def clear_all_data(self):
+        """清除所有数据"""
+        conn = sqlite3.connect(DB_PATH)
+        c = conn.cursor()
+        c.execute('DELETE FROM segments')
+        c.execute('DELETE FROM speakers')
+        c.execute('DELETE FROM meetings')
+        c.execute('DELETE FROM segments_fts')
+        conn.commit()
+        conn.close()

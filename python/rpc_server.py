@@ -6,32 +6,91 @@ stdin/stdout JSON-RPC communication with Electron
 
 import json
 import sys
+import os
 import threading
 import traceback
+import subprocess
+
+# 检查依赖
+def check_dependencies():
+    """检查 Python 依赖是否已安装"""
+    missing = []
+    required = {
+        'sounddevice': 'sounddevice>=0.4.4',
+        'numpy': 'numpy>=1.24.0',
+        'funasr': 'funasr>=2.0.0',
+        'soundfile': 'soundfile>=0.12.0',
+        'scipy': 'scipy>=1.10.0',
+    }
+    for module, package in required.items():
+        try:
+            __import__(module)
+        except ImportError:
+            missing.append(package)
+    return missing
+
+def check_python_version():
+    """检查 Python 版本"""
+    v = sys.version_info
+    if v.major < 3 or (v.major == 3 and v.minor < 8):
+        return f"Python 3.8+ required, got {v.major}.{v.minor}"
+    return None
+
+def get_model_cache_size():
+    """估算模型缓存大小"""
+    home = os.path.expanduser('~')
+    cache_dirs = [
+        os.path.join(home, '.cache', 'torch'),
+        os.path.join(home, '.cache', 'huggingface'),
+        os.path.join(home, '.funasr'),
+    ]
+    total = 0
+    for d in cache_dirs:
+        if os.path.exists(d):
+            try:
+                for root, dirs, files in os.walk(d):
+                    for f in files:
+                        total += os.path.getsize(os.path.join(root, f))
+            except:
+                pass
+    if total > 1024 * 1024 * 1024:
+        return f"{total / (1024**3):.1f} GB"
+    elif total > 1024 * 1024:
+        return f"{total / (1024**2):.0f} MB"
+    return f"{total / 1024:.0f} KB"
+
+def send_notification(method, params):
+    """发送通知到 Electron"""
+    print(json.dumps({'jsonrpc': '2.0', 'method': method, 'params': params}), flush=True)
+
 from audio_capture import AudioCapture
 from transcriber import TranscriptionService
+from audio_converter import convert_to_wav, get_audio_info
 
 # 全局单例
 audio_capture = None
 transcription_service = None
-active_recordings = {}
 
 def handle_request(method, params, rpc_id):
     """处理 RPC 请求"""
     try:
         if method == 'initialize':
             return {'status': 'ok'}
+        elif method == 'check_env':
+            # 环境检测
+            py_err = check_python_version()
+            missing = check_dependencies()
+            return {
+                'pythonVersion': f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}",
+                'pythonError': py_err,
+                'missingDeps': missing,
+                'modelCacheSize': get_model_cache_size(),
+            }
         elif method == 'capture_start':
             result = audio_capture.start_capture(
                 sample_rate=params.get('sampleRate', 16000),
                 channels=params.get('channels', 1)
             )
-            recording_id = result['recording_id']
-            active_recordings[recording_id] = {
-                'status': 'recording',
-                'start_time': result.get('start_time'),
-                'duration': 0
-            }
             return result
         elif method == 'capture_pause':
             audio_capture.pause_capture(params.get('recordingId'))
@@ -41,19 +100,39 @@ def handle_request(method, params, rpc_id):
             return {'status': 'recording'}
         elif method == 'capture_stop':
             result = audio_capture.stop_capture(params.get('recordingId'))
-            if params.get('recordingId') in active_recordings:
-                del active_recordings[params.get('recordingId')]
             return result
         elif method == 'capture_status':
             return audio_capture.get_status(params.get('recordingId'))
         elif method == 'process_file':
-            # 后台处理导入的音频文件（不阻塞主线程）
+            file_path = params['filePath']
+
+            # 音频格式转换（如果是非 WAV 格式）
+            ext = os.path.splitext(file_path)[1].lower()
+            if ext not in ('.wav',):
+                converted = convert_to_wav(file_path)
+                if converted:
+                    file_path = converted
+                    send_notification('env_notice', {
+                        'type': 'info',
+                        'message': f'已将音频转换为 16kHz WAV 格式'
+                    })
+                else:
+                    return {'error': f'不支持的音频格式: {ext}'}
+
+            # 后台处理
             def _process():
-                transcription_service.process_file(
-                    file_path=params['filePath'],
-                    meeting_id=params.get('meetingId'),
-                    language=params.get('language', 'zh')
-                )
+                try:
+                    transcription_service.process_file(
+                        file_path=file_path,
+                        meeting_id=params.get('meetingId'),
+                        language=params.get('language', 'zh')
+                    )
+                except Exception as e:
+                    traceback.print_exc()
+                    send_notification('processing_error', {
+                        'meetingId': params.get('meetingId'),
+                        'error': str(e)
+                    })
             threading.Thread(target=_process, daemon=True).start()
             return {'status': 'processing', 'meetingId': params.get('meetingId')}
         elif method == 'get_meetings':
@@ -71,6 +150,31 @@ def handle_request(method, params, rpc_id):
             return {'status': 'updated'}
         elif method == 'search_meetings':
             return transcription_service.search_meetings(params)
+        elif method == 'get_audio_info':
+            return get_audio_info(params['filePath'])
+        elif method == 'clear_cache':
+            # 清除模型缓存
+            home = os.path.expanduser('~')
+            cache_dirs = [
+                os.path.join(home, '.cache', 'torch'),
+                os.path.join(home, '.cache', 'huggingface'),
+                os.path.join(home, '.funasr'),
+            ]
+            cleared = 0
+            for d in cache_dirs:
+                if os.path.exists(d):
+                    try:
+                        import shutil
+                        size = sum(os.path.getsize(os.path.join(r, f))
+                                    for r, _, fs in os.walk(d) for f in fs)
+                        shutil.rmtree(d)
+                        cleared += size
+                    except:
+                        pass
+            return {'cleared': cleared}
+        elif method == 'clear_data':
+            transcription_service.clear_all_data()
+            return {'status': 'cleared'}
         else:
             return {'error': f'Unknown method: {method}'}
     except Exception as e:
@@ -85,7 +189,7 @@ def main():
     transcription_service = TranscriptionService()
 
     # 发送初始化消息
-    print(json.dumps({'jsonrpc': '2.0', 'method': 'initialized', 'params': {}}))
+    print(json.dumps({'jsonrpc': '2.0', 'method': 'initialized', 'params': {}}), flush=True)
 
     # 主循环：读取 stdin 处理 RPC
     buffer = ''
@@ -116,7 +220,7 @@ def main():
                 'id': rpc_id,
                 'result': result
             }
-            print(json.dumps(response))
+            print(json.dumps(response), flush=True)
             sys.stdout.flush()
         except Exception as e:
             traceback.print_exc()

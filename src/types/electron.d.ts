@@ -20,13 +20,33 @@ interface RealtimeCaptionData {
   startTime: number
 }
 
+interface EnvNoticeData {
+  type: 'info' | 'warning' | 'error'
+  message: string
+}
+
+interface ModelDownloadData {
+  message: string
+  progress?: number
+}
+
 interface ElectronAPI {
   pythonCall: (method: string, params?: Record<string, unknown>) => Promise<any>
   selectFile: () => Promise<string[]>
   getAppPath: () => Promise<string>
+  getAudioUrl: (filePath: string) => Promise<string>
+  getDarkMode: () => Promise<boolean>
+  saveSettings: (settings: Record<string, any>) => Promise<any>
+  getSettings: () => Promise<Record<string, any>>
+  showItemInFolder: (path: string) => Promise<void>
   onCaptureStatus: (callback: (data: CaptureStatusData) => void) => void
   onRealtimeCaption: (callback: (data: RealtimeCaptionData) => void) => void
   onProcessingProgress: (callback: (data: ProcessingProgressData) => void) => void
+  onPythonReady: (callback: () => void) => void
+  onPythonError: (callback: (msg: string) => void) => void
+  onEnvNotice: (callback: (data: EnvNoticeData) => void) => void
+  onModelDownload: (callback: (data: ModelDownloadData) => void) => void
+  onTrayAction: (callback: (action: string) => void) => void
   removeAllListeners: (channel: string) => void
 }
 

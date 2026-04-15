@@ -1,9 +1,20 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import {
+  app,
+  BrowserWindow,
+  ipcMain,
+  dialog,
+  Tray,
+  Menu,
+  globalShortcut,
+  nativeTheme,
+  shell
+} from 'electron'
 import { join } from 'path'
 import { spawn, ChildProcess } from 'child_process'
 import * as fs from 'fs'
 
 let mainWindow: BrowserWindow | null = null
+let tray: Tray | null = null
 let pythonProcess: ChildProcess | null = null
 let pythonReady = false
 let pendingRequests = new Map<number, { resolve: (v: any) => void; reject: (e: any) => void }>()
@@ -11,7 +22,6 @@ let nextRequestId = 1
 
 const isDev = process.env.NODE_ENV !== 'production' || !app.isPackaged
 
-// 获取资源路径（打包后指向 extraResources）
 function getResourcePath(relative: string): string {
   if (app.isPackaged) {
     return join(process.resourcesPath, relative)
@@ -19,12 +29,18 @@ function getResourcePath(relative: string): string {
   return join(__dirname, '..', relative)
 }
 
-// 获取 Python 路径
 function getPythonPath(): string {
   if (app.isPackaged) {
     return join(process.resourcesPath, 'python', 'rpc_server.py')
   }
   return join(__dirname, '..', 'python', 'rpc_server.py')
+}
+
+function getPythonDir(): string {
+  if (app.isPackaged) {
+    return join(process.resourcesPath, 'python')
+  }
+  return join(__dirname, '..', 'python')
 }
 
 function createWindow() {
@@ -39,7 +55,8 @@ function createWindow() {
       nodeIntegration: false
     },
     title: 'MeetingRecorder',
-    show: false
+    show: false,
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#111827' : '#ffffff',
   })
 
   mainWindow.once('ready-to-show', () => {
@@ -52,18 +69,115 @@ function createWindow() {
   } else {
     mainWindow.loadFile(join(__dirname, '../dist/index.html'))
   }
+
+  mainWindow.on('close', (event) => {
+    // 检查设置：是否最小化到托盘
+    const settings = getStoredSettings()
+    if (settings.minimizeToTray && !app.isQuitting) {
+      event.preventDefault()
+      mainWindow?.hide()
+    }
+  })
+
+  mainWindow.on('closed', () => {
+    mainWindow = null
+  })
 }
 
-// 启动 Python RPC 服务器
+function getStoredSettings(): Record<string, any> {
+  try {
+    const path = join(app.getPath('userData'), 'settings.json')
+    if (fs.existsSync(path)) {
+      return JSON.parse(fs.readFileSync(path, 'utf-8'))
+    }
+  } catch {}
+  return {}
+}
+
+function createTray() {
+  // 创建托盘图标（使用内置图标路径或默认图标）
+  const iconName = process.platform === 'win32' ? 'icon.ico' : 'icon.png'
+  let iconPath: string
+  if (app.isPackaged) {
+    iconPath = join(process.resourcesPath, 'assets', iconName)
+  } else {
+    iconPath = join(__dirname, '..', 'assets', iconName)
+  }
+
+  // 如果图标不存在，使用空图标（Electron 会使用默认）
+  if (!fs.existsSync(iconPath)) {
+    iconPath = join(__dirname, '..', 'assets', 'icon.png')
+  }
+  if (!fs.existsSync(iconPath)) {
+    // 完全找不到图标，跳过托盘
+    return
+  }
+
+  try {
+    tray = new Tray(iconPath)
+  } catch {
+    return
+  }
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: '显示窗口',
+      click: () => {
+        mainWindow?.show()
+        mainWindow?.focus()
+      }
+    },
+    {
+      label: '开始录音',
+      click: () => {
+        mainWindow?.webContents.send('tray_action', 'start_recording')
+        mainWindow?.show()
+      }
+    },
+    {
+      label: '停止录音',
+      click: () => {
+        mainWindow?.webContents.send('tray_action', 'stop_recording')
+      }
+    },
+    { type: 'separator' },
+    {
+      label: '退出',
+      click: () => {
+        (app as any).isQuitting = true
+        app.quit()
+      }
+    }
+  ])
+
+  tray.setToolTip('MeetingRecorder')
+  tray.setContextMenu(contextMenu)
+
+  tray.on('double-click', () => {
+    mainWindow?.show()
+    mainWindow?.focus()
+  })
+}
+
+function registerGlobalShortcuts() {
+  // 全局快捷键：CmdOrCtrl+Shift+R 开始/停止录音
+  const startRet = globalShortcut.register('CommandOrControl+Shift+R', () => {
+    mainWindow?.webContents.send('tray_action', 'toggle_recording')
+    mainWindow?.show()
+  })
+
+  if (!startRet) {
+    console.log('Failed to register global shortcut: CommandOrControl+Shift+R')
+  }
+}
+
 function startPythonServer() {
   const pythonScript = getPythonPath()
-  const pythonDir = app.isPackaged
-    ? join(process.resourcesPath, 'python')
-    : join(__dirname, '..', 'python')
+  const pythonDir = getPythonDir()
 
-  // 确保 python 目录存在
   if (!fs.existsSync(pythonDir)) {
     console.error('Python directory not found:', pythonDir)
+    mainWindow?.webContents.send('python_error', 'Python directory not found')
     return
   }
 
@@ -86,14 +200,12 @@ function startPythonServer() {
         try {
           const msg = JSON.parse(line)
           const id = msg.id
-          // 响应消息：有 id 字段
           if (id !== undefined && pendingRequests.has(id)) {
             const { resolve, reject } = pendingRequests.get(id)!
             pendingRequests.delete(id)
             if (msg.error) reject(new Error(msg.error.message || msg.error))
             else resolve(msg.result)
           } else {
-            // 通知消息：无 id 或不在 pending 中
             handlePythonMessage(msg)
           }
         } catch (e) {
@@ -104,7 +216,12 @@ function startPythonServer() {
   })
 
   pythonProcess.stderr?.on('data', (data: Buffer) => {
-    console.error('Python stderr:', data.toString())
+    const text = data.toString()
+    // 发送模型下载进度（SenseVoice 下载信息会打到 stderr）
+    if (text.includes('Downloading') || text.includes('Fetching') || text.includes('%')) {
+      mainWindow?.webContents.send('model_download', { message: text.trim() })
+    }
+    console.error('Python stderr:', text)
   })
 
   pythonProcess.on('close', (code) => {
@@ -132,6 +249,7 @@ function handlePythonMessage(msg: any) {
     case 'initialized':
       pythonReady = true
       console.log('Python RPC server ready')
+      mainWindow.webContents.send('python_ready')
       break
     case 'capture_status':
       mainWindow.webContents.send('capture_status', msg.params)
@@ -142,6 +260,15 @@ function handlePythonMessage(msg: any) {
     case 'processing_progress':
       mainWindow.webContents.send('processing_progress', msg.params)
       break
+    case 'env_notice':
+      mainWindow.webContents.send('env_notice', msg.params)
+      break
+    case 'processing_error':
+      mainWindow.webContents.send('processing_error', msg.params)
+      break
+    case 'model_download':
+      mainWindow.webContents.send('model_download', msg.params)
+      break
   }
 }
 
@@ -150,11 +277,10 @@ ipcMain.handle('python_call', async (_event, method: string, params: any) => {
   return new Promise((resolve, reject) => {
     const id = nextRequestId++
 
-    // 注册 pending 请求
     const timeout = setTimeout(() => {
       pendingRequests.delete(id)
       reject(new Error(`RPC call ${method} timed out`))
-    }, 300000) // 5 分钟超时（转写可能较长）
+    }, 300000)
 
     pendingRequests.set(id, {
       resolve: (result) => {
@@ -175,7 +301,7 @@ ipcMain.handle('select_file', async () => {
   const result = await dialog.showOpenDialog(mainWindow!, {
     properties: ['openFile', 'multiSelections'],
     filters: [
-      { name: 'Audio', extensions: ['mp3', 'm4a', 'wav', 'flac', 'ogg', 'opus', 'aac', 'wma'] }
+      { name: 'Audio', extensions: ['mp3', 'm4a', 'wav', 'flac', 'ogg', 'opus', 'aac', 'wma', 'mp4', 'mov'] }
     ]
   })
   return result.filePaths
@@ -185,13 +311,36 @@ ipcMain.handle('get_app_path', () => {
   return app.getPath('userData')
 })
 
+ipcMain.handle('get_dark_mode', () => {
+  return nativeTheme.shouldUseDarkColors
+})
+
+ipcMain.handle('save_settings', (_event, settings: Record<string, any>) => {
+  const path = join(app.getPath('userData'), 'settings.json')
+  fs.writeFileSync(path, JSON.stringify(settings, null, 2))
+  return { status: 'ok' }
+})
+
+ipcMain.handle('get_settings', () => {
+  return getStoredSettings()
+})
+
+ipcMain.handle('show_item_in_folder', (_event, path: string) => {
+  shell.showItemInFolder(path)
+})
+
+// App lifecycle
 app.whenReady().then(() => {
   createWindow()
+  createTray()
+  registerGlobalShortcuts()
   startPythonServer()
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createWindow()
+    } else {
+      mainWindow?.show()
     }
   })
 })
@@ -203,7 +352,9 @@ app.on('window-all-closed', () => {
 })
 
 app.on('before-quit', () => {
+  (app as any).isQuitting = true
   if (pythonProcess) {
     pythonProcess.kill()
   }
+  globalShortcut.unregisterAll()
 })

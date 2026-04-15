@@ -1,6 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Search, Calendar, Users, Clock, Star, Trash2, FileAudio, X, ChevronRight, Copy, Filter } from 'lucide-react'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import { Search, Calendar, Users, Clock, Star, Trash2, FileAudio, X, ChevronRight, Copy, Filter, PieChart, ChevronDown, ChevronUp } from 'lucide-react'
 import { useMeetingStore, MeetingDetail, SearchFilters, DateRange } from '@/stores/meetingStore'
+import AudioPlayer from './AudioPlayer'
+import SpeakingTimeChart from './SpeakingTimeChart'
 
 export default function HistoryView() {
   const {
@@ -338,6 +340,11 @@ function MeetingDetailView({
 }) {
   const speakerList = Object.values(detail.speakers)
   const [activeSpeaker, setActiveSpeaker] = useState<string | null>(null)
+  const [activeSegmentId, setActiveSegmentId] = useState<string | null>(null)
+  const [showStats, setShowStats] = useState(false)
+  const [playerKey, setPlayerKey] = useState(0) // force remount on meeting change
+  const segmentRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+  const transcriptRef = useRef<HTMLDivElement>(null)
 
   if (detail.segments.length === 0) {
     return <div className="text-center py-8 text-gray-400">暂无转写内容</div>
@@ -347,59 +354,141 @@ function MeetingDetailView({
     ? segmentsBySpeaker[activeSpeaker] || []
     : detail.segments
 
+  // Timeline sync: find active segment from currentTime
+  const handleTimeUpdate = useCallback((currentTime: number) => {
+    // Find segment that contains currentTime
+    const seg = displaySegments.find(s => currentTime >= s.startTime && currentTime < s.endTime)
+    const newActiveId = seg?.id || null
+    if (newActiveId !== activeSegmentId) {
+      setActiveSegmentId(newActiveId)
+      // Auto-scroll active segment into view
+      if (newActiveId) {
+        const el = segmentRefs.current.get(newActiveId)
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+        }
+      }
+    }
+  }, [displaySegments, activeSegmentId])
+
+  // Clear active highlight when speaker filter changes
+  useEffect(() => {
+    setActiveSegmentId(null)
+  }, [activeSpeaker])
+
+  // Reset player key when detail changes
+  useEffect(() => {
+    setPlayerKey(prev => prev + 1)
+  }, [detail.meeting.id])
+
   return (
     <div>
-      {/* Speaker filter chips */}
-      <div className="flex flex-wrap gap-2 mb-4">
-        <button
-          onClick={() => setActiveSpeaker(null)}
-          className={`px-3 py-1 rounded-full text-sm transition-colors ${!activeSpeaker ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-        >
-          全部
-        </button>
-        {speakerList.map(sp => (
+      {/* Audio Player */}
+      {detail.meeting.audioPath && (
+        <div className="mb-4">
+          <AudioPlayer
+            key={`player-${detail.meeting.id}-${playerKey}`}
+            audioPath={detail.meeting.audioPath}
+            duration={detail.meeting.duration}
+            onTimeUpdate={handleTimeUpdate}
+            startTime={0}
+          />
+        </div>
+      )}
+
+      {/* Speaker filter chips + stats toggle */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex flex-wrap gap-2">
           <button
-            key={sp.id}
-            onClick={() => setActiveSpeaker(sp.id)}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-sm transition-colors ${activeSpeaker === sp.id ? 'text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
-            style={activeSpeaker === sp.id ? { backgroundColor: sp.color, color: '#fff' } : {}}
+            onClick={() => setActiveSpeaker(null)}
+            className={`px-3 py-1 rounded-full text-sm transition-colors ${!activeSpeaker ? 'bg-gray-800 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
           >
-            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: sp.color }} />
-            {sp.name}
+            全部
           </button>
-        ))}
+          {speakerList.map(sp => (
+            <button
+              key={sp.id}
+              onClick={() => setActiveSpeaker(sp.id)}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-full text-sm transition-colors ${activeSpeaker === sp.id ? 'text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}
+              style={activeSpeaker === sp.id ? { backgroundColor: sp.color, color: '#fff' } : {}}
+            >
+              <span className="w-2 h-2 rounded-full" style={{ backgroundColor: sp.color }} />
+              {sp.name}
+            </button>
+          ))}
+        </div>
+
+        {/* Stats toggle */}
+        <button
+          onClick={() => setShowStats(!showStats)}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm transition-colors ${showStats ? 'bg-blue-50 text-blue-600' : 'bg-gray-100 text-gray-500 hover:bg-gray-200'}`}
+        >
+          <PieChart size={14} />
+          发言统计
+          {showStats ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+        </button>
       </div>
 
-      {/* Transcript */}
-      <div className="space-y-3 max-h-96 overflow-y-auto">
-        {displaySegments.map(seg => (
-          <div key={seg.id} className="flex gap-3 group">
-            {/* Timestamp */}
-            <div className="text-xs text-gray-400 font-mono w-10 flex-shrink-0 pt-0.5">
-              {formatTime(seg.startTime)}
-            </div>
-            {/* Speaker color bar */}
+      {/* Speaking time chart (collapsible) */}
+      {showStats && (
+        <div className="mb-4">
+          <SpeakingTimeChart segments={detail.segments} speakers={detail.speakers} />
+        </div>
+      )}
+
+      {/* Transcript with timeline sync */}
+      <div ref={transcriptRef} className="space-y-1 max-h-80 overflow-y-auto pr-1">
+        {displaySegments.map(seg => {
+          const isActive = seg.id === activeSegmentId
+          return (
             <div
-              className="w-1.5 rounded-full flex-shrink-0 mt-1"
-              style={{ backgroundColor: seg.speakerColor || '#9ca3af' }}
-            />
-            {/* Text + copy */}
-            <div className="flex-1 relative">
-              <p className="text-sm text-gray-800 leading-relaxed pr-8">{seg.text}</p>
-              <button
-                onClick={() => copyToClipboard(seg.text, seg.id)}
-                className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-100 rounded text-gray-400 transition-opacity"
-                title="复制"
-              >
-                {copiedId === seg.id ? (
-                  <span className="text-xs text-green-500">已复制</span>
-                ) : (
-                  <Copy size={12} />
-                )}
-              </button>
+              key={seg.id}
+              ref={el => {
+                if (el) segmentRefs.current.set(seg.id, el)
+              }}
+              className={`flex gap-3 group rounded-lg px-2 py-1.5 transition-all cursor-pointer ${
+                isActive
+                  ? 'bg-blue-50 border border-blue-200 shadow-sm'
+                  : 'hover:bg-gray-50'
+              }`}
+              onClick={() => {
+                // Seek audio to this segment's start time
+                const audio = document.querySelector('audio') as HTMLAudioElement
+                if (audio) {
+                  audio.currentTime = seg.startTime
+                  audio.play().catch(console.error)
+                }
+              }}
+            >
+              {/* Timestamp */}
+              <div className={`text-xs font-mono w-12 flex-shrink-0 pt-0.5 ${isActive ? 'text-blue-500 font-medium' : 'text-gray-400'}`}>
+                {formatTime(seg.startTime)}
+              </div>
+              {/* Speaker color bar */}
+              <div
+                className="w-1.5 rounded-full flex-shrink-0 mt-1"
+                style={{ backgroundColor: seg.speakerColor || '#9ca3af' }}
+              />
+              {/* Text + copy */}
+              <div className="flex-1 relative">
+                <p className={`text-sm leading-relaxed pr-8 ${isActive ? 'text-blue-900 font-medium' : 'text-gray-800'}`}>
+                  {seg.text}
+                </p>
+                <button
+                  onClick={e => { e.stopPropagation(); copyToClipboard(seg.text, seg.id) }}
+                  className="absolute top-0 right-0 opacity-0 group-hover:opacity-100 p-1 hover:bg-gray-200 rounded text-gray-400 transition-opacity"
+                  title="复制"
+                >
+                  {copiedId === seg.id ? (
+                    <span className="text-xs text-green-500">已复制</span>
+                  ) : (
+                    <Copy size={12} />
+                  )}
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       {/* Export actions */}
