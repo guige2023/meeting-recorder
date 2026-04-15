@@ -1,6 +1,9 @@
 # Bundled Python environment (614MB+, downloaded separately)
 bundled-python/
 
+# AI models (downloaded at runtime, ~800MB)
+models/
+
 # Python bytecode
 __pycache__/
 *.py[cod]
@@ -20,3 +23,4 @@ node_modules/
 # Logs
 *.log
 data/meetings.db
+release/
