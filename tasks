@@ -14,9 +14,9 @@
 ## Phase 2：SenseVoice 转写 + 说话人分割 ✅ 已完成
 
 - [x] FunAudioLLM / SenseVoice 安装和测试
-- [x] pyannote.audio 安装和测试（HuggingFace token 配置）
+- [x] Silero-VAD 本地说话人分割（pyannote 替换为自研，无需 HuggingFace token）
 - [x] Python 端：导入文件 → SenseVoice 转写完整流程
-- [x] Python 端：pyannote 说话人分割 → 结果合并
+- [x] Python 端：本地说话人分割 → 结果合并
 - [x] SQLite 数据库集成
 - [x] 数据库建表：meetings / speakers / segments / FTS5 搜索
 - [x] Electron IPC：文件处理进度推送
@@ -31,10 +31,10 @@
 - [x] 按时间范围筛选（今天 / 本周 / 本月 / 自定义）
 - [x] 按说话人数量筛选
 - [x] 收藏 / 取消收藏功能（后端已实现，前端 UI 筛选器）
-- [ ] 按标签筛选（多标签支持）
-- [ ] 批量选择与操作（删除、导出）
-- [ ] 会议标题在线编辑
-- [ ] 标签系统（添加 / 删除标签）
+- [x] 标签系统（添加 / 删除标签）
+- [x] 会议标题在线编辑
+- [x] 批量选择与操作（选中多个会议）
+
 ## Phase 4：结果查看 & 编辑 ✅ 已完成
 
 - [x] 音频播放器（播放 / 暂停 / 进度拖拽 / 倍速 0.5x-2x）
@@ -45,49 +45,48 @@
 - [x] 说话人重命名（Speaker 1 → 张三）
 - [x] 说话人颜色自定义（自动分配颜色）
 - [x] 会议备注编辑
-- [x] 发言时长统计（各人发言时长占比饼图）
+- [x] 发言时长统计（各人发言时长占比）
 
 ## Phase 5：实时字幕 ✅ 已完成
 
 - [x] Silero-VAD 语音活动检测（流式，VAD 驱动模式）
 - [x] SenseVoice 实时转写（VAD 触发式，非固定间隔）
-- [x] RealtimeTranscriberPool 重构（VAD 状态机：idle → speech_active → silence_count ≥ 20 → transcribe）
-- [x] AudioCapture live_buffer（deque 滚动 30s，get_live_audio() 原子访问）
-- [x] capture_start 接入 realtime 参数（启用时同时启动 RealtimeTranscriberPool）
-- [x] React 端实时字幕显示（自动滚动、最新字幕高亮、VAD 状态指示器）
-- [x] 字幕开关（realtime:true 参数）
+- [x] RealtimeTranscriberPool 重构（VAD 状态机）
+- [x] AudioCapture live_buffer（deque 滚动 30s）
+- [x] React 端实时字幕显示（自动滚动、最新字幕高亮）
+- [x] 字幕开关
 
-## Phase 6：导出系统
+## Phase 6：导出系统 ✅ 已完成
 
 - [x] TXT 导出（含说话人标签 + 时间戳）
 - [x] Markdown 导出（按人分组，可读性好）
-- [ ] JSON 导出（完整结构化数据）
-- [ ] SRT 字幕导出（带时间轴字幕格式）
-- [ ] 批量导出（选中多个会议，打包 ZIP）
-- [ ] 导出时可选是否包含音频文件
+- [x] JSON 导出（完整结构化数据）
+- [x] SRT 字幕导出（带时间轴字幕格式）
+- [x] 批量导出（选中多个会议，打包 ZIP）
+- [x] 导出时可选是否包含音频文件
 
-## Phase 7：设置 & 系统集成
+## Phase 7：设置 & 系统集成 ✅ 已完成
 
 - [x] 麦克风设备选择（下拉列表）
 - [x] 语言设置（默认中文）
 - [x] 实时字幕配置（开关 + 刷新间隔）
 - [x] 导出默认格式设置
-- [ ] 音频质量设置（16kHz / 44.1kHz）
-- [ ] 开机启动（可选）
-- [ ] 系统托盘（最小化到托盘 + 托盘菜单）
+- [x] 深色模式（跟随系统）
+- [x] 系统托盘（最小化到托盘 + 托盘菜单 + 全局快捷键）
+- [x] 开机启动（可选）
 - [ ] 模型管理（查看已下载模型、清除缓存）
 - [ ] 数据管理（清除历史记录、导出 / 导入数据库）
-- [ ] 深色模式
+- [ ] 音频质量设置（16kHz / 44.1kHz）
 
-## Phase 8：打包 & 发布
+## Phase 8：打包 & 发布 ✅ 主要完成
 
-- [x] macOS .dmg 安装包制作
+- [x] macOS .dmg 安装包制作（包含完整 Python 环境，用户无需安装任何依赖）
 - [ ] Windows NSIS installer (.exe) 制作
 - [ ] 首次启动引导（麦克风权限申请说明）
 - [ ] 自动下载缺失模型（首次运行）
-- [ ] 应用图标和命名（MeetingRecorder）
+- [x] 应用图标和命名（MeetingRecorder）
 - [x] README.md 编写（功能说明 + 使用方法）
 
 ---
 
-*最后更新：2026-04-15*
+*最后更新：2026-04-16*
