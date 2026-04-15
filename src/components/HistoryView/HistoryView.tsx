@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react'
 import { Search, Calendar, Users, Clock, Star, Trash2, FileAudio, X, ChevronRight, Copy, Filter, Tag, Edit3, Check, AudioLines } from 'lucide-react'
 import { useMeetingStore, MeetingDetail, SearchFilters, DateRange, Segment } from '@/stores/meetingStore'
 import AudioPlayer from './AudioPlayer'
+import BatchExportModal from './BatchExportModal'
 
 export default function HistoryView() {
   const {
@@ -26,6 +27,8 @@ export default function HistoryView() {
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [displayMeetings, setDisplayMeetings] = useState(meetings)
   const [searchHighlight, setSearchHighlight] = useState<string>('')
+  const [batchSelectedIds, setBatchSelectedIds] = useState<Set<string>>(new Set())
+  const [batchModalOpen, setBatchModalOpen] = useState(false)
 
   useEffect(() => { fetchMeetings() }, [])
 
@@ -172,6 +175,37 @@ export default function HistoryView() {
         )}
       </div>
 
+      {/* Batch export toolbar */}
+      <div className="flex items-center justify-between mb-3">
+        <span className="text-sm text-gray-500 dark:text-gray-400">{displayMeetings.length} 个会议</span>
+        <div className="flex items-center gap-2">
+          {displayMeetings.length > 0 && (
+            <>
+              <button
+                onClick={() => {
+                  if (batchSelectedIds.size === displayMeetings.length) {
+                    setBatchSelectedIds(new Set())
+                  } else {
+                    setBatchSelectedIds(new Set(displayMeetings.map((m: any) => m.id)))
+                  }
+                }}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+              >
+                <span className="text-xs">☐</span> 全选
+              </button>
+              {batchSelectedIds.size > 0 && (
+                <button
+                  onClick={() => setBatchModalOpen(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors"
+                >
+                  ↓ 批量导出 ({batchSelectedIds.size})
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+
       {/* Meeting List */}
       <div className="flex-1 overflow-y-auto space-y-3">
         {loading ? <div className="text-center py-12 text-gray-400">加载中...</div>
@@ -182,7 +216,22 @@ export default function HistoryView() {
             <div key={meeting.id}>
               <div className={`bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm hover:shadow-md transition-all cursor-pointer ${selectedId === meeting.id ? 'ring-2 ring-primary-300 dark:ring-primary-700' : ''}`}
                 onClick={() => handleMeetingClick(meeting.id)}>
-                <div className="flex items-start justify-between">
+                <div className="flex items-start gap-3">
+                  <input
+                    type="checkbox"
+                    checked={batchSelectedIds.has(meeting.id)}
+                    onChange={e => {
+                      e.stopPropagation()
+                      setBatchSelectedIds(prev => {
+                        const next = new Set(prev)
+                        if (next.has(meeting.id)) next.delete(meeting.id)
+                        else next.add(meeting.id)
+                        return next
+                      })
+                    }}
+                    onClick={e => e.stopPropagation()}
+                    className="mt-1 w-4 h-4 rounded border-gray-300 text-primary-500 cursor-pointer flex-shrink-0"
+                  />
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2 flex-wrap">
                       <h3 className="font-medium text-gray-900 dark:text-white">{highlightText(meeting.title, searchHighlight)}</h3>
@@ -228,6 +277,24 @@ export default function HistoryView() {
             </div>
           ))}
       </div>
+
+      {batchModalOpen && (
+        <BatchExportModal
+          selectedCount={batchSelectedIds.size}
+          onClose={() => setBatchModalOpen(false)}
+          onExport={async (formats, includeAudio) => {
+            const result = await window.electronAPI.pythonCall('batch_export_meetings', {
+              ids: Array.from(batchSelectedIds),
+              formats,
+              include_audio: includeAudio,
+            })
+            if (result.zipPath) {
+              await window.electronAPI.showItemInFolder(result.zipPath)
+            }
+            setBatchSelectedIds(new Set())
+          }}
+        />
+      )}
     </div>
   )
 }
