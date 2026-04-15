@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Search, Calendar, Users, Clock, Star, Trash2, FileAudio, X, ChevronRight, Copy, Filter, Tag, Edit3, Check, AudioLines, Mic } from 'lucide-react'
+import { Search, Calendar, Users, Clock, Star, Trash2, FileAudio, X, ChevronRight, Copy, Filter, Tag, Edit3, Check, AudioLines, Mic, BarChart2 } from 'lucide-react'
 import { useMeetingStore, MeetingDetail, SearchFilters, DateRange, Segment } from '@/stores/meetingStore'
 import AudioPlayer from './AudioPlayer'
 import BatchExportModal from './BatchExportModal'
@@ -161,6 +161,10 @@ export default function HistoryView() {
   const avgDuration = totalCount > 0 ? totalDuration / totalCount : 0
   const now = new Date()
   const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const monthCount = meetings.filter(m => {
+    const d = new Date(m.createdAt)
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === thisMonth
+  }).length
   const monthDuration = meetings
     .filter(m => {
       const d = new Date(m.createdAt)
@@ -168,18 +172,23 @@ export default function HistoryView() {
     })
     .reduce((sum, m) => sum + (m.duration || 0), 0)
 
-  const fmt = (seconds: number) => {
-    if (seconds < 60) return `${Math.round(seconds)}秒`
+  // 格式化为：X小时Y分钟（总有时长用）
+  const fmtHours = (seconds: number) => {
     const h = Math.floor(seconds / 3600)
     const m = Math.floor((seconds % 3600) / 60)
-    if (h > 0) return `${h}小时${m}分钟`
+    if (h > 0) return `${h}小时${m > 0 ? `${m}分钟` : ''}`
     return `${m}分钟`
+  }
+  // 格式化为：X分钟（平均时长用）
+  const fmtMins = (seconds: number) => {
+    if (seconds < 60) return `${Math.round(seconds)}秒`
+    return `${Math.round(seconds / 60)}分钟`
   }
 
   const statCards = [
-    { icon: <Mic size={18} />, label: '录音次数', value: `${totalCount} 次`, bg: 'bg-blue-50 dark:bg-blue-950', text: 'text-blue-600 dark:text-blue-300' },
-    { icon: <Clock size={18} />, label: '总时长', value: fmt(totalDuration), bg: 'bg-purple-50 dark:bg-purple-950', text: 'text-purple-600 dark:text-purple-300' },
-    { icon: <Calendar size={18} />, label: '本月时长', value: fmt(monthDuration), bg: 'bg-green-50 dark:bg-green-950', text: 'text-green-600 dark:text-green-300' },
+    { icon: <Mic size={18} />, label: '本月录音', value: `${monthCount} 次`, bg: 'bg-blue-50 dark:bg-blue-950', text: 'text-blue-600 dark:text-blue-300' },
+    { icon: <Clock size={18} />, label: '总时长', value: fmtHours(totalDuration), bg: 'bg-purple-50 dark:bg-purple-950', text: 'text-purple-600 dark:text-purple-300' },
+    { icon: <BarChart2 size={18} />, label: '平均时长', value: fmtMins(avgDuration), bg: 'bg-green-50 dark:bg-green-950', text: 'text-green-600 dark:text-green-300' },
   ]
 
   return (
