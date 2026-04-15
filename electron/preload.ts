@@ -15,6 +15,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // 主题
   getDarkMode: () => ipcRenderer.invoke('get_dark_mode'),
+  setDarkMode: (dark: boolean) => ipcRenderer.invoke('set_dark_mode', dark),
+  onThemeChanged: (callback: (isDark: boolean) => void) => {
+    ipcRenderer.on('theme_changed', (_event, isDark) => callback(isDark))
+  },
 
   // 设置
   saveSettings: (settings: Record<string, any>) => ipcRenderer.invoke('save_settings', settings),
@@ -61,6 +65,8 @@ declare global {
       getAppPath: () => Promise<string>
       getAudioUrl: (filePath: string) => Promise<string>
       getDarkMode: () => Promise<boolean>
+      setDarkMode: (dark: boolean) => Promise<any>
+      onThemeChanged: (callback: (isDark: boolean) => void) => void
       saveSettings: (settings: Record<string, any>) => Promise<any>
       getSettings: () => Promise<Record<string, any>>
       showItemInFolder: (path: string) => Promise<void>

@@ -95,30 +95,10 @@ function getStoredSettings(): Record<string, any> {
   return {}
 }
 
-function createTray() {
-  // 创建托盘图标（使用内置图标路径或默认图标）
-  const iconName = process.platform === 'win32' ? 'icon.ico' : 'icon.png'
-  let iconPath: string
-  if (app.isPackaged) {
-    iconPath = join(process.resourcesPath, 'assets', iconName)
-  } else {
-    iconPath = join(__dirname, '..', 'assets', iconName)
-  }
-
-  // 如果图标不存在，使用空图标（Electron 会使用默认）
-  if (!fs.existsSync(iconPath)) {
-    iconPath = join(__dirname, '..', 'assets', 'icon.png')
-  }
-  if (!fs.existsSync(iconPath)) {
-    // 完全找不到图标，跳过托盘
-    return
-  }
-
-  try {
-    tray = new Tray(iconPath)
-  } catch {
-    return
-  }
+function buildTrayMenu() {
+  if (!tray) return
+  const settings = getStoredSettings()
+  const minimizeToTray = !!settings.minimizeToTray
 
   const contextMenu = Menu.buildFromTemplate([
     {
@@ -129,30 +109,65 @@ function createTray() {
       }
     },
     {
-      label: '开始录音',
+      label: '开始/停止录音',
       click: () => {
-        mainWindow?.webContents.send('tray_action', 'start_recording')
+        mainWindow?.webContents.send('tray_action', 'toggle_recording')
         mainWindow?.show()
       }
     },
+    { type: 'separator' },
     {
-      label: '停止录音',
-      click: () => {
-        mainWindow?.webContents.send('tray_action', 'stop_recording')
+      label: '最小化到托盘',
+      type: 'checkbox',
+      checked: minimizeToTray,
+      click: (menuItem) => {
+        const updated = { ...getStoredSettings(), minimizeToTray: menuItem.checked }
+        const path = join(app.getPath('userData'), 'settings.json')
+        fs.writeFileSync(path, JSON.stringify(updated, null, 2))
       }
     },
     { type: 'separator' },
     {
       label: '退出',
       click: () => {
-  isQuitting = true
-  app.quit()
+        isQuitting = true
+        app.quit()
       }
     }
   ])
 
-  tray.setToolTip('MeetingRecorder')
   tray.setContextMenu(contextMenu)
+}
+
+function createTray() {
+  const iconName = process.platform === 'win32' ? 'icon.ico' : 'icon.png'
+  let iconPath: string
+
+  // 开发模式用 resources 目录下的图标
+  if (app.isPackaged) {
+    iconPath = join(process.resourcesPath, 'resources', iconName)
+  } else {
+    // 开发模式从项目根目录 resources/ 读取
+    iconPath = join(__dirname, '..', '..', 'resources', iconName)
+  }
+
+  if (!fs.existsSync(iconPath)) {
+    iconPath = join(__dirname, '..', '..', 'resources', 'icon.png')
+  }
+  if (!fs.existsSync(iconPath)) {
+    console.log('[Tray] icon not found, skipping tray creation')
+    return
+  }
+
+  try {
+    tray = new Tray(iconPath)
+  } catch (e) {
+    console.log('[Tray] failed to create tray:', e)
+    return
+  }
+
+  tray.setToolTip('会议录音机')
+  buildTrayMenu()
 
   tray.on('double-click', () => {
     mainWindow?.show()
@@ -321,6 +336,16 @@ ipcMain.handle('get_audio_url', (_event, filePath: string) => {
 
 ipcMain.handle('get_dark_mode', () => {
   return nativeTheme.shouldUseDarkColors
+})
+
+ipcMain.handle('set_dark_mode', (_event, dark: boolean) => {
+  nativeTheme.themeSource = dark ? 'dark' : 'light'
+  return { status: 'ok' }
+})
+
+// 监听系统主题变化，通知渲染进程
+nativeTheme.on('updated', () => {
+  mainWindow?.webContents.send('theme_changed', nativeTheme.shouldUseDarkColors)
 })
 
 ipcMain.handle('save_settings', (_event, settings: Record<string, any>) => {
