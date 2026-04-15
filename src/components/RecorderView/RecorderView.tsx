@@ -154,18 +154,18 @@ export default function RecorderView() {
 
     return (
       <div className="h-full flex items-center justify-center bg-gray-50">
-        <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-md mx-4">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-8 w-full max-w-md mx-4">
           <div className="flex items-center gap-3 mb-6">
             <FileAudio size={32} className="text-primary-500" />
             <div className="flex-1 min-w-0">
-              <p className="font-medium text-gray-800 truncate">{importProgress.fileName}</p>
+              <p className="font-medium text-gray-800 dark:text-gray-100 truncate">{importProgress.fileName}</p>
               <p className="text-sm text-gray-500">{msg}</p>
             </div>
           </div>
 
           {/* Progress bar */}
           <div className="mb-6">
-            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+            <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
               <div
                 className="h-full bg-primary-500 transition-all duration-500"
                 style={{ width: `${Math.round(prog * 100)}%` }}
@@ -178,11 +178,11 @@ export default function RecorderView() {
 
           {showResult && transcriptionResult ? (
             <div className="space-y-4">
-              <h3 className="font-semibold text-gray-800">{transcriptionResult.meeting.title}</h3>
+              <h3 className="font-semibold text-gray-800 dark:text-gray-100">{transcriptionResult.meeting.title}</h3>
               <TranscriptionResultView detail={transcriptionResult} formatTime={formatTimestamp} />
               <button
                 onClick={closeResult}
-                className="w-full py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-sm transition-colors"
+                className="w-full py-2 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-300 rounded-lg text-sm transition-colors"
               >
                 关闭
               </button>
@@ -214,22 +214,22 @@ export default function RecorderView() {
             </div>
           )}
         </div>
-        <div className="text-3xl font-mono text-gray-700">
+        <div className="text-3xl font-mono text-gray-700 dark:text-gray-200">
           {formatTime(duration)}
         </div>
       </div>
 
       {/* Waveform */}
-      <div className="bg-white rounded-2xl p-6 mb-6 shadow-sm">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 mb-6 shadow-sm">
         <Waveform />
       </div>
 
       {/* Audio Level Indicator */}
-      <div className="bg-white rounded-2xl p-4 mb-6 shadow-sm">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl p-4 mb-6 shadow-sm">
         <div className="flex items-center gap-3">
           <Volume2 size={20} className="text-gray-400" />
           <div className="flex-1">
-            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+            <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
               <div
                 className="h-full bg-primary-500 transition-all duration-100"
                 style={{ width: `${Math.min(audioLevel * 100, 100)}%` }}
@@ -244,9 +244,9 @@ export default function RecorderView() {
 
       {/* Realtime Captions */}
       {status === 'recording' && (
-        <div className="bg-white rounded-2xl p-6 mb-6 shadow-sm flex-1 overflow-hidden">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 mb-6 shadow-sm flex-1 overflow-hidden">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="font-medium text-gray-700">实时字幕</h3>
+            <h3 className="font-medium text-gray-700 dark:text-gray-200">实时字幕</h3>
           </div>
           <RealtimeCaptions
             captions={realtimeCaptions}
@@ -354,7 +354,7 @@ function TranscriptionResultView({ detail, formatTime }: { detail: MeetingDetail
             />
             {/* Text */}
             <div className="flex-1">
-              <p className="text-sm text-gray-800 leading-relaxed">{seg.text}</p>
+              <p className="text-sm text-gray-800 dark:text-gray-200 leading-relaxed">{seg.text}</p>
             </div>
           </div>
         ))}

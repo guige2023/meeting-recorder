@@ -5,6 +5,10 @@ import SettingsView from './components/SettingsView/SettingsView'
 import OnboardingView from './components/OnboardingView/OnboardingView'
 import { Mic, FileText, Settings } from 'lucide-react'
 
+// DEBUG: 检查 electronAPI 是否注入
+console.log('[App] electronAPI type:', typeof window.electronAPI)
+console.log('[App] electronAPI keys:', window.electronAPI ? Object.keys(window.electronAPI) : 'null/undefined')
+
 type Tab = 'recorder' | 'history' | 'settings'
 
 function App() {
@@ -16,6 +20,11 @@ function App() {
   const [pythonReady, setPythonReady] = useState(false)
 
   useEffect(() => {
+    if (!window.electronAPI) {
+      console.error('[App] electronAPI not available yet!')
+      return
+    }
+
     // 加载主题
     window.electronAPI.getDarkMode().then(isDark => {
       setDarkMode(isDark)
@@ -121,7 +130,7 @@ function App() {
           )}
           <div className={`w-2 h-2 rounded-full ${pythonReady ? 'bg-green-500' : 'bg-yellow-500'}`}
                title={pythonReady ? 'Python 就绪' : 'Python 初始化中...'} />
-          <span className="text-sm text-gray-400 dark:text-gray-500">v1.0.2</span>
+          <span className="text-sm text-gray-400 dark:text-gray-500">v1.0.3</span>
         </div>
       </header>
 

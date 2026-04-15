@@ -56,7 +56,7 @@ export default function RealtimeCaptions({ captions, audioLevel = 0, isRecording
         className="flex-1 overflow-y-auto max-h-52 space-y-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent"
       >
         {captions.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-24 text-gray-400">
+          <div className="flex flex-col items-center justify-center h-24 text-gray-400 dark:text-gray-500">
             <div className="text-2xl mb-2">🎙️</div>
             <p className="text-sm">
               {isRecording ? '正在监听语音...' : '开始录音后显示实时字幕'}
@@ -70,18 +70,18 @@ export default function RealtimeCaptions({ captions, audioLevel = 0, isRecording
                 key={caption.id}
                 className={`flex gap-3 rounded-lg px-3 py-2 transition-all ${
                   isLatest
-                    ? 'bg-blue-50 border border-blue-100 shadow-sm'
-                    : 'bg-gray-50 hover:bg-gray-100'
+                    ? 'bg-blue-50 dark:bg-blue-900/30 border-blue-100 dark:border-blue-800 shadow-sm'
+                    : 'bg-gray-50 dark:bg-gray-800 hover:bg-gray-100 dark:hover:bg-gray-700'
                 }`}
               >
                 {/* 时间戳 */}
-                <div className={`flex-shrink-0 text-xs font-mono w-12 pt-0.5 ${isLatest ? 'text-blue-500 font-medium' : 'text-gray-400'}`}>
+                <div className={`flex-shrink-0 text-xs font-mono w-12 pt-0.5 ${isLatest ? 'text-blue-500 dark:text-blue-300 font-medium' : 'text-gray-400 dark:text-gray-500'}`}>
                   {formatTime(caption.startTime)}
                 </div>
 
                 {/* 文本 */}
                 <div className="flex-1 min-w-0">
-                  <p className={`text-sm leading-relaxed ${isLatest ? 'text-blue-900 font-medium' : 'text-gray-700'}`}>
+                  <p className={`text-sm leading-relaxed ${isLatest ? 'text-blue-900 dark:text-blue-100 font-medium' : 'text-gray-700 dark:text-gray-300'}`}>
                     {caption.text}
                   </p>
                 </div>
