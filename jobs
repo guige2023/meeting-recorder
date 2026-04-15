@@ -1,5 +1,47 @@
 # 已完成任务记录
 
+## 2026-04-15 Phase 5：实时字幕（Silero-VAD + SenseVoice VAD 驱动模式）
+
+**完成时间**：2026-04-15
+
+**改动概要**：
+
+调研阶段：
+- 确认 Silero-VAD 是语言无关的语音检测模型，完美支持中文
+- 确认 SenseVoice 原生支持 zh/en/ja/ko/yue
+- 设计 VAD 驱动架构：idle → speech_active → silence ≥ 1.28s → transcribe
+
+Python 管线（每步独立 commit）：
+- `audio_capture.py`: 添加 `live_buffer` (deque maxlen=300, 约30秒) + `get_live_audio()` 方法，线程安全
+- `realtime_transcriber.py`: 重写为 VAD 驱动模式，RealtimeTranscriberPool 状态机实现
+- `rpc_server.py`: `capture_start` 支持 `realtime: bool` 参数，同时启动/停止 RealtimeTranscriberPool
+
+前端（每步独立 commit）：
+- `recorderStore.ts`: `capture_start` 传递 `realtime: true, language: zh`；新增 `vadStatus` 状态
+- `RecorderView.tsx` / `RealtimeCaptions.tsx`: 传递 `audioLevel`+`isRecording`，最新字幕蓝色高亮，VAD 状态指示器（语音中/等待语音），自动滚动
+
+**Commit 历史**（每步独立提交）：
+- e8f76e1d docs: Phase 5 research - Silero-VAD 调研
+- c6718c5e feat(audio_capture): live_buffer deque + get_live_audio()
+- c34233fb feat(realtime): RealtimeTranscriberPool VAD-driven mode
+- b74d0e0e feat(rpc): capture_start/stop connect to RealtimeTranscriberPool
+- 3ab634cf feat(recorder): capture_start passes realtime:true
+- f0a642d6 feat(frontend): RealtimeCaptions auto-scroll + VAD indicator
+
+**验证结果**：
+- ✅ `npm run build` 全量编译通过
+- ✅ macOS DMG 打包成功：release/MeetingRecorder-1.0.0-arm64.dmg
+
+**文件变更**：
+- 修改：python/audio_capture.py（live_buffer + enable_realtime）
+- 修改：python/realtime_transcriber.py（完全重写，VAD 状态机）
+- 修改：python/rpc_server.py（realtime_pool 初始化 + 接入 capture_start/stop）
+- 修改：src/stores/recorderStore.ts（realtime:true + vadStatus）
+- 修改：src/components/RecorderView/RealtimeCaptions.tsx（增强展示）
+- 修改：src/components/RecorderView/RecorderView.tsx（传递 props）
+
+---
+
 ## 2026-04-15 Phase 4：结果查看 & 编辑（音频播放器 + 时间线同步 + 饼图）
 
 **完成时间**：2026-04-15

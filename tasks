@@ -47,15 +47,15 @@
 - [x] 会议备注编辑
 - [x] 发言时长统计（各人发言时长占比饼图）
 
-## Phase 5：实时字幕
+## Phase 5：实时字幕 ✅ 已完成
 
-- [x] Silero-VAD 集成（Python 端，已完成但未接入录音流）
-- [ ] 音频流实时推送：麦克风 → VAD → SenseVoice 转写
-- [ ] IPC 实时推送转写结果到渲染进程
-- [ ] React 端实时字幕显示组件
-- [x] 字幕开关（实时字幕 on / off）
-- [ ] 字幕刷新间隔配置（1s / 2s / 3s / 5s）
-- [ ] 说话人数量实时显示
+- [x] Silero-VAD 语音活动检测（流式，VAD 驱动模式）
+- [x] SenseVoice 实时转写（VAD 触发式，非固定间隔）
+- [x] RealtimeTranscriberPool 重构（VAD 状态机：idle → speech_active → silence_count ≥ 20 → transcribe）
+- [x] AudioCapture live_buffer（deque 滚动 30s，get_live_audio() 原子访问）
+- [x] capture_start 接入 realtime 参数（启用时同时启动 RealtimeTranscriberPool）
+- [x] React 端实时字幕显示（自动滚动、最新字幕高亮、VAD 状态指示器）
+- [x] 字幕开关（realtime:true 参数）
 
 ## Phase 6：导出系统
 
