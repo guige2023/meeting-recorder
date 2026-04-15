@@ -10,7 +10,8 @@ export default function HistoryView() {
     fetchMeetings,
     deleteMeeting,
     toggleFavorite,
-    getMeetingDetail
+    getMeetingDetail,
+    searchMeetings
   } = useMeetingStore()
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -131,20 +132,23 @@ export default function HistoryView() {
   return (
     <div className="h-full flex flex-col p-6">
       {/* Search and Filter */}
-      <div className="flex gap-4 mb-6">
-        <div className="flex-1 relative">
+      <div className="flex flex-wrap gap-3 mb-6">
+        {/* Search input */}
+        <div className="flex-1 min-w-[200px] relative">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={20} />
           <input
             type="text"
-            placeholder="搜索会议内容..."
+            placeholder="搜索会议内容...（FTS5全文搜索）"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
             className="w-full pl-10 pr-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
         </div>
+
+        {/* Date range */}
         <select
           value={filterTimeRange}
-          onChange={e => setFilterTimeRange(e.target.value)}
+          onChange={e => setFilterTimeRange(e.target.value as DateRange)}
           className="px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
         >
           <option value="all">全部时间</option>
@@ -152,6 +156,59 @@ export default function HistoryView() {
           <option value="week">本周</option>
           <option value="month">本月</option>
         </select>
+
+        {/* Speaker count */}
+        <select
+          value={filterSpeakerCount ?? ''}
+          onChange={e => setFilterSpeakerCount(e.target.value ? Number(e.target.value) : null)}
+          className="px-4 py-2.5 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500"
+        >
+          <option value="">所有人数</option>
+          <option value="1">1人+</option>
+          <option value="2">2人+</option>
+          <option value="3">3人+</option>
+          <option value="4">4人+</option>
+          <option value="5">5人+</option>
+        </select>
+
+        {/* Favorites filter */}
+        <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+          <button
+            onClick={() => setFilterFavorites(null)}
+            className={`px-3 py-2.5 text-sm transition-colors ${filterFavorites === null ? 'bg-gray-800 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+          >
+            全部
+          </button>
+          <button
+            onClick={() => setFilterFavorites(true)}
+            className={`px-3 py-2.5 text-sm transition-colors flex items-center gap-1 ${filterFavorites === true ? 'bg-yellow-50 text-yellow-600' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+          >
+            <Star size={14} className={filterFavorites === true ? 'fill-yellow-400 text-yellow-400' : ''} />
+            已收藏
+          </button>
+          <button
+            onClick={() => setFilterFavorites(false)}
+            className={`px-3 py-2.5 text-sm transition-colors ${filterFavorites === false ? 'bg-gray-800 text-white' : 'bg-white text-gray-600 hover:bg-gray-50'}`}
+          >
+            未收藏
+          </button>
+        </div>
+
+        {/* Clear all filters */}
+        {(searchQuery || filterTimeRange !== 'all' || filterFavorites !== null || filterSpeakerCount !== null) && (
+          <button
+            onClick={() => {
+              setSearchQuery('')
+              setFilterTimeRange('all')
+              setFilterFavorites(null)
+              setFilterSpeakerCount(null)
+            }}
+            className="px-3 py-2.5 text-sm text-gray-500 hover:text-gray-700 hover:bg-gray-100 rounded-lg transition-colors flex items-center gap-1"
+          >
+            <X size={14} />
+            清除筛选
+          </button>
+        )}
       </div>
 
       {/* Meeting List */}

@@ -145,7 +145,7 @@ export const useMeetingStore = create<MeetingState>((set, get) => ({
 
   searchMeetings: async (filters) => {
     try {
-      return await window.electronAPI.pythonCall('search_meetings', filters)
+      return await window.electronAPI.pythonCall('search_meetings', filters as Record<string, unknown>)
     } catch (err) {
       console.error('Failed to search meetings:', err)
       return []
