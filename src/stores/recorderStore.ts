@@ -98,6 +98,15 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
       const result = await window.electronAPI.pythonCall('capture_stop', {
         recordingId: get().recordingId
       })
+
+      // 自动触发转写（后台进行，不阻塞）
+      if (result?.filePath) {
+        window.electronAPI.pythonCall('process_file', {
+          filePath: result.filePath,
+          language: 'zh'
+        }).catch(err => console.error('process_file error:', err))
+      }
+
       set({
         status: 'idle',
         recordingId: null

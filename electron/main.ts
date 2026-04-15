@@ -6,6 +6,8 @@ import * as fs from 'fs'
 let mainWindow: BrowserWindow | null = null
 let pythonProcess: ChildProcess | null = null
 let pythonReady = false
+let pendingRequests = new Map<number, { resolve: (v: any) => void; reject: (e: any) => void }>()
+let nextRequestId = 1
 
 const isDev = process.env.NODE_ENV !== 'production' || !app.isPackaged
 
@@ -83,7 +85,17 @@ function startPythonServer() {
       if (line.trim()) {
         try {
           const msg = JSON.parse(line)
-          handlePythonMessage(msg)
+          const id = msg.id
+          // 响应消息：有 id 字段
+          if (id !== undefined && pendingRequests.has(id)) {
+            const { resolve, reject } = pendingRequests.get(id)!
+            pendingRequests.delete(id)
+            if (msg.error) reject(new Error(msg.error.message || msg.error))
+            else resolve(msg.result)
+          } else {
+            // 通知消息：无 id 或不在 pending 中
+            handlePythonMessage(msg)
+          }
         } catch (e) {
           // ignore non-JSON lines
         }
@@ -136,26 +148,25 @@ function handlePythonMessage(msg: any) {
 // IPC handlers
 ipcMain.handle('python_call', async (_event, method: string, params: any) => {
   return new Promise((resolve, reject) => {
-    if (!pythonReady && method !== 'initialize') {
-      reject(new Error('Python server not ready'))
-      return
-    }
+    const id = nextRequestId++
 
-    const id = Date.now()
+    // 注册 pending 请求
     const timeout = setTimeout(() => {
+      pendingRequests.delete(id)
       reject(new Error(`RPC call ${method} timed out`))
-    }, 30000)
+    }, 300000) // 5 分钟超时（转写可能较长）
 
-    const handler = (msg: any) => {
-      if (msg.id === id) {
+    pendingRequests.set(id, {
+      resolve: (result) => {
         clearTimeout(timeout)
-        pythonProcess?.stdout?.off('data', handler)
-        if (msg.error) reject(new Error(msg.error.message))
-        else resolve(msg.result)
+        resolve(result)
+      },
+      reject: (err) => {
+        clearTimeout(timeout)
+        reject(err)
       }
-    }
+    })
 
-    pythonProcess?.stdout?.on('data', handler)
     sendToPython({ jsonrpc: '2.0', id, method, params })
   })
 })

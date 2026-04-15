@@ -1,10 +1,18 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { Mic, Square, Pause, Play, Loader2, Upload, Volume2 } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Mic, Square, Pause, Play, Upload, Volume2, X, FileAudio } from 'lucide-react'
 import Waveform from './Waveform'
 import RealtimeCaptions from './RealtimeCaptions'
 import { useRecorderStore } from '@/stores/recorderStore'
+import { useMeetingStore, MeetingDetail, Segment } from '@/stores/meetingStore'
 
-type RecordingStatus = 'idle' | 'recording' | 'paused'
+type RecordingStatus = 'idle' | 'recording' | 'paused' | 'processing'
+
+interface ImportProgress {
+  meetingId: string
+  fileName: string
+  progress: number
+  message: string
+}
 
 export default function RecorderView() {
   const {
@@ -19,7 +27,42 @@ export default function RecorderView() {
     stopRecording
   } = useRecorderStore()
 
-  const [showImport, setShowImport] = useState(false)
+  const {
+    processingProgress,
+    setProcessingProgress,
+    clearProcessingProgress,
+    getMeetingDetail
+  } = useMeetingStore()
+
+  // Import state
+  const [importProgress, setImportProgress] = useState<ImportProgress | null>(null)
+  const [transcriptionResult, setTranscriptionResult] = useState<MeetingDetail | null>(null)
+  const [showResult, setShowResult] = useState(false)
+
+  // Listen for processing progress from Python via Electron IPC
+  useEffect(() => {
+    window.electronAPI.onProcessingProgress((data) => {
+      const { meetingId, progress, message } = data
+      setProcessingProgress(meetingId, progress, message)
+
+      // When progress reaches 100%, fetch the result
+      if (progress >= 1.0) {
+        // Wait a bit for DB write to complete
+        setTimeout(async () => {
+          const detail = await getMeetingDetail(meetingId)
+          if (detail) {
+            setTranscriptionResult(detail)
+            setShowResult(true)
+          }
+          clearProcessingProgress(meetingId)
+        }, 1000)
+      }
+    })
+
+    return () => {
+      window.electronAPI.removeAllListeners('processing_progress')
+    }
+  }, [setProcessingProgress, clearProcessingProgress, getMeetingDetail])
 
   const handleStart = async () => {
     await startRecording()
@@ -39,10 +82,34 @@ export default function RecorderView() {
 
   const handleImport = async () => {
     const files = await window.electronAPI.selectFile()
-    if (files.length > 0) {
-      // TODO: 调用 Python 处理导入的文件
-      console.log('Selected files:', files)
+    if (files.length === 0) return
+
+    const filePath = files[0]
+    const fileName = filePath.split(/[/\\]/).pop() || '未知文件'
+
+    // Start processing — Python sends progress via IPC
+    try {
+      const result = await window.electronAPI.pythonCall('process_file', {
+        filePath,
+        language: 'zh'
+      }) as { meetingId?: string }
+
+      if (result?.meetingId) {
+        setImportProgress({
+          meetingId: result.meetingId,
+          fileName,
+          progress: 0,
+          message: '等待处理...'
+        })
+      }
+    } catch (err) {
+      console.error('Failed to start processing:', err)
     }
+  }
+
+  const closeResult = () => {
+    setShowResult(false)
+    setTranscriptionResult(null)
   }
 
   const formatTime = (seconds: number) => {
@@ -55,26 +122,79 @@ export default function RecorderView() {
     return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`
   }
 
+  const formatTimestamp = (seconds: number) => {
+    const m = Math.floor(seconds / 60)
+    const s = Math.floor(seconds % 60)
+    return `${m}:${s.toString().padStart(2, '0')}`
+  }
+
   const getStatusText = () => {
     switch (status) {
-      case 'recording':
-        return '正在录音'
-      case 'paused':
-        return '已暂停'
-      default:
-        return '就绪'
+      case 'recording': return '正在录音'
+      case 'paused': return '已暂停'
+      case 'processing': return '处理中...'
+      default: return '就绪'
     }
   }
 
   const getStatusColor = () => {
     switch (status) {
-      case 'recording':
-        return 'text-red-500'
-      case 'paused':
-        return 'text-yellow-500'
-      default:
-        return 'text-gray-400'
+      case 'recording': return 'text-red-500'
+      case 'paused': return 'text-yellow-500'
+      case 'processing': return 'text-blue-500'
+      default: return 'text-gray-400'
     }
+  }
+
+  // Show import progress modal
+  if (importProgress) {
+    const meetingProg = processingProgress[importProgress.meetingId]
+    const prog = meetingProg?.progress ?? importProgress.progress
+    const msg = meetingProg?.message ?? importProgress.message
+
+    return (
+      <div className="h-full flex items-center justify-center bg-gray-50">
+        <div className="bg-white rounded-2xl shadow-lg p-8 w-full max-w-md mx-4">
+          <div className="flex items-center gap-3 mb-6">
+            <FileAudio size={32} className="text-primary-500" />
+            <div className="flex-1 min-w-0">
+              <p className="font-medium text-gray-800 truncate">{importProgress.fileName}</p>
+              <p className="text-sm text-gray-500">{msg}</p>
+            </div>
+          </div>
+
+          {/* Progress bar */}
+          <div className="mb-6">
+            <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary-500 transition-all duration-500"
+                style={{ width: `${Math.round(prog * 100)}%` }}
+              />
+            </div>
+            <p className="text-center text-sm text-gray-400 mt-2">
+              {Math.round(prog * 100)}%
+            </p>
+          </div>
+
+          {showResult && transcriptionResult ? (
+            <div className="space-y-4">
+              <h3 className="font-semibold text-gray-800">{transcriptionResult.meeting.title}</h3>
+              <TranscriptionResultView detail={transcriptionResult} formatTime={formatTimestamp} />
+              <button
+                onClick={closeResult}
+                className="w-full py-2 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded-lg text-sm transition-colors"
+              >
+                关闭
+              </button>
+            </div>
+          ) : (
+            <p className="text-center text-sm text-gray-400">
+              请稍候，AI 正在识别说话人和转写内容...
+            </p>
+          )}
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -133,7 +253,7 @@ export default function RecorderView() {
       )}
 
       {/* Control Buttons */}
-      <div className="flex items-center justify-center gap-4">
+      <div className="flex items-center justify-center gap-4 mt-auto">
         {status === 'idle' && (
           <>
             <button
@@ -191,14 +311,50 @@ export default function RecorderView() {
           </>
         )}
       </div>
+    </div>
+  )
+}
 
-      {/* Loading State */}
-      {status === 'processing' && (
-        <div className="flex flex-col items-center justify-center py-12">
-          <Loader2 size={48} className="text-primary-500 animate-spin mb-4" />
-          <p className="text-gray-600">处理中，请稍候...</p>
-        </div>
-      )}
+// Transcription result view component
+function TranscriptionResultView({ detail, formatTime }: { detail: MeetingDetail; formatTime: (s: number) => string }) {
+  const speakerList = Object.values(detail.speakers)
+
+  return (
+    <div className="space-y-4">
+      {/* Speaker chips */}
+      <div className="flex flex-wrap gap-2">
+        {speakerList.map(sp => (
+          <div
+            key={sp.id}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-full text-sm"
+            style={{ backgroundColor: sp.color + '20', color: sp.color }}
+          >
+            <span className="w-2 h-2 rounded-full" style={{ backgroundColor: sp.color }} />
+            {sp.name}
+          </div>
+        ))}
+      </div>
+
+      {/* Segments */}
+      <div className="space-y-3 max-h-80 overflow-y-auto">
+        {detail.segments.map(seg => (
+          <div key={seg.id} className="flex gap-3">
+            {/* Timestamp */}
+            <div className="text-xs text-gray-400 font-mono w-10 flex-shrink-0 pt-0.5">
+              {formatTime(seg.startTime)}
+            </div>
+            {/* Speaker badge */}
+            <div
+              className="w-1.5 rounded-full flex-shrink-0 mt-1"
+              style={{ backgroundColor: seg.speakerColor || '#9ca3af' }}
+            />
+            {/* Text */}
+            <div className="flex-1">
+              <p className="text-sm text-gray-800 leading-relaxed">{seg.text}</p>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

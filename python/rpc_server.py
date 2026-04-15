@@ -47,14 +47,19 @@ def handle_request(method, params, rpc_id):
         elif method == 'capture_status':
             return audio_capture.get_status(params.get('recordingId'))
         elif method == 'process_file':
-            # 后台处理导入的音频文件
-            threading.Thread(
-                target=transcription_service.process_file,
-                args=(params['filePath'], params.get('recordingId'))
-            ).start()
-            return {'status': 'processing', 'jobId': params.get('recordingId')}
+            # 后台处理导入的音频文件（不阻塞主线程）
+            def _process():
+                transcription_service.process_file(
+                    file_path=params['filePath'],
+                    meeting_id=params.get('meetingId'),
+                    language=params.get('language', 'zh')
+                )
+            threading.Thread(target=_process, daemon=True).start()
+            return {'status': 'processing', 'meetingId': params.get('meetingId')}
         elif method == 'get_meetings':
             return transcription_service.get_meetings()
+        elif method == 'get_meeting_detail':
+            return transcription_service.get_meeting_detail(params['id'])
         elif method == 'delete_meeting':
             transcription_service.delete_meeting(params['id'])
             return {'status': 'deleted'}
@@ -62,8 +67,10 @@ def handle_request(method, params, rpc_id):
             transcription_service.toggle_favorite(params['id'])
             return {'status': 'ok'}
         elif method == 'update_meeting':
-            transcription_service.update_meeting(params['id'], params)
+            transcription_service.update_meeting(params['id'], params.get('updates', {}))
             return {'status': 'updated'}
+        elif method == 'search_meetings':
+            return transcription_service.search_meetings(params.get('query', ''))
         else:
             return {'error': f'Unknown method: {method}'}
     except Exception as e:

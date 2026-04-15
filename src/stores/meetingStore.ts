@@ -13,20 +13,51 @@ export interface Meeting {
   notes: string
 }
 
+export interface Speaker {
+  id: string
+  label: string
+  name: string
+  color: string
+}
+
+export interface Segment {
+  id: string
+  speakerId: string
+  speakerLabel: string
+  speakerName: string
+  speakerColor: string
+  startTime: number
+  endTime: number
+  text: string
+  confidence: number
+}
+
+export interface MeetingDetail {
+  meeting: Meeting
+  speakers: Record<string, Speaker>
+  segments: Segment[]
+}
+
 interface MeetingState {
   meetings: Meeting[]
   loading: boolean
+  // 处理进度: meetingId -> { progress: number, message: string }
+  processingProgress: Record<string, { progress: number; message: string }>
 
   fetchMeetings: () => Promise<void>
   deleteMeeting: (id: string) => Promise<void>
   toggleFavorite: (id: string) => Promise<void>
-  addMeeting: (meeting: Omit<Meeting, 'id'>) => Promise<void>
   updateMeeting: (id: string, updates: Partial<Meeting>) => Promise<void>
+  getMeetingDetail: (id: string) => Promise<MeetingDetail | null>
+  searchMeetings: (query: string) => Promise<Meeting[]>
+  setProcessingProgress: (meetingId: string, progress: number, message: string) => void
+  clearProcessingProgress: (meetingId: string) => void
 }
 
 export const useMeetingStore = create<MeetingState>((set, get) => ({
   meetings: [],
   loading: false,
+  processingProgress: {},
 
   fetchMeetings: async () => {
     set({ loading: true })
@@ -51,9 +82,6 @@ export const useMeetingStore = create<MeetingState>((set, get) => ({
   },
 
   toggleFavorite: async (id) => {
-    const meeting = get().meetings.find(m => m.id === id)
-    if (!meeting) return
-
     try {
       await window.electronAPI.pythonCall('toggle_favorite', { id })
       set(state => ({
@@ -66,20 +94,9 @@ export const useMeetingStore = create<MeetingState>((set, get) => ({
     }
   },
 
-  addMeeting: async (meeting) => {
-    try {
-      const result = await window.electronAPI.pythonCall('add_meeting', meeting)
-      set(state => ({
-        meetings: [{ ...meeting, id: result.id }, ...state.meetings]
-      }))
-    } catch (err) {
-      console.error('Failed to add meeting:', err)
-    }
-  },
-
   updateMeeting: async (id, updates) => {
     try {
-      await window.electronAPI.pythonCall('update_meeting', { id, ...updates })
+      await window.electronAPI.pythonCall('update_meeting', { id, updates })
       set(state => ({
         meetings: state.meetings.map(m =>
           m.id === id ? { ...m, ...updates } : m
@@ -88,5 +105,56 @@ export const useMeetingStore = create<MeetingState>((set, get) => ({
     } catch (err) {
       console.error('Failed to update meeting:', err)
     }
+  },
+
+  getMeetingDetail: async (id) => {
+    try {
+      const result = await window.electronAPI.pythonCall('get_meeting_detail', { id })
+      if (!result) return null
+      return {
+        meeting: result.meeting,
+        speakers: result.speakers,
+        segments: result.segments.map((s: any) => ({
+          id: s.id,
+          speakerId: s.speaker_id,
+          speakerLabel: s.speaker_label,
+          speakerName: s.speaker_name,
+          speakerColor: s.speaker_color,
+          startTime: s.start_time,
+          endTime: s.end_time,
+          text: s.text,
+          confidence: s.confidence
+        }))
+      }
+    } catch (err) {
+      console.error('Failed to get meeting detail:', err)
+      return null
+    }
+  },
+
+  searchMeetings: async (query) => {
+    try {
+      return await window.electronAPI.pythonCall('search_meetings', { query })
+    } catch (err) {
+      console.error('Failed to search meetings:', err)
+      return []
+    }
+  },
+
+  setProcessingProgress: (meetingId, progress, message) => {
+    set(state => ({
+      processingProgress: {
+        ...state.processingProgress,
+        [meetingId]: { progress, message }
+      }
+    }))
+  },
+
+  clearProcessingProgress: (meetingId) => {
+    set(state => {
+      const next = { ...state.processingProgress }
+      delete next[meetingId]
+      return { processingProgress: next }
+    })
   }
 }))
