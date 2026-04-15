@@ -36,6 +36,8 @@ interface ElectronAPI {
   getAppPath: () => Promise<string>
   getAudioUrl: (filePath: string) => Promise<string>
   getDarkMode: () => Promise<boolean>
+  setDarkMode: (dark: boolean) => Promise<any>
+  onThemeChanged: (callback: (isDark: boolean) => void) => void
   saveSettings: (settings: Record<string, any>) => Promise<any>
   getSettings: () => Promise<Record<string, any>>
   showItemInFolder: (path: string) => Promise<void>

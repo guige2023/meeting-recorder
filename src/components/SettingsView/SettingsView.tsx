@@ -37,16 +37,34 @@ export default function SettingsView() {
     })
 
     window.electronAPI.getAppPath().then(p => setAppPath(p))
+
+    // 监听系统主题变化
+    window.electronAPI.onThemeChanged((isDark: boolean) => {
+      setSettings(s => {
+        // 只有用户没有手动覆盖时才跟随系统
+        const followed = localStorage.getItem('meetingRecorderSettings')
+        if (followed) {
+          const parsed = JSON.parse(followed)
+          if (parsed._themeSource === 'manual') return s
+        }
+        if (isDark) {
+          document.documentElement.classList.add('dark')
+        } else {
+          document.documentElement.classList.remove('dark')
+        }
+        return { ...s, darkMode: isDark }
+      })
+    })
   }, [])
 
   const handleSave = async () => {
     setSaving(true)
-    localStorage.setItem('meetingRecorderSettings', JSON.stringify(settings))
-
-    // 保存到 Electron 设置
-    await window.electronAPI.saveSettings(settings)
+    const toSave = { ...settings, _themeSource: 'manual' as string }
+    localStorage.setItem('meetingRecorderSettings', JSON.stringify(toSave))
+    await window.electronAPI.saveSettings(toSave)
 
     // 应用深色模式
+    await window.electronAPI.setDarkMode(settings.darkMode)
     if (settings.darkMode) {
       document.documentElement.classList.add('dark')
     } else {
