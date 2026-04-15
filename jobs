@@ -1,6 +1,38 @@
 # 已完成任务记录
 
-（暂无完成记录）
+## 2026-04-15 Phase 1：项目脚手架 & 录音核心
+
+**完成时间**：2026-04-15
+
+**改动概要**：
+- 初始化 Electron + Vite + React + TypeScript 项目
+- 配置 electron-builder 打包（Windows NSIS + macOS DMG）
+- 搭建 Python subprocess + stdio JSON-RPC 通信层
+- Python 端：sounddevice 录音模块（支持 macOS + Windows）
+- WAV 文件保存（16kHz 单声道）
+- Electron IPC：录音控制 + 状态推送
+- React UI：录音/暂停/停止按钮 + 时长显示
+- 波形可视化（Canvas + requestAnimationFrame）
+- 实时字幕组件（框架，接收 IPC 推送）
+- 历史记录列表（框架，搜索/筛选/收藏）
+- 设置面板（麦克风选择/语言/实时字幕/导出格式/托盘等）
+- SQLite 数据库初始化（meetings/speakers/segments/FTS5）
+- TailwindCSS 样式
+- Zustand 状态管理
+
+**验证结果**：
+- ✅ `npm run build:vite` 编译通过
+- ✅ 前端构建产物：dist/（HTML/CSS/JS）
+- ✅ Electron 构建产物：dist-electron/（main.js / preload.js）
+
+**文件变更**：
+- 新增：electron/main.ts, electron/preload.ts
+- 新增：src/App.tsx, src/main.tsx, src/index.css
+- 新增：src/components/RecorderView/*, src/components/HistoryView/*, src/components/SettingsView/*
+- 新增：src/stores/recorderStore.ts, src/stores/meetingStore.ts
+- 新增：python/rpc_server.py, python/audio_capture.py, python/transcriber.py
+- 新增：vite.config.ts, tsconfig.json, tailwind.config.js, package.json
+- commit: ab66e18 "Phase 1: Electron + Vite + React + TypeScript + Python RPC + 录音基础"
 
 ---
 

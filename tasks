@@ -2,13 +2,13 @@
 
 ## Phase 1：项目脚手架 & 录音核心
 
-- [ ] 初始化 Electron 项目（Vite + React + TypeScript）
-- [ ] 配置 electron-builder 打包（Windows NSIS + macOS DMG）
-- [ ] 搭建 Python subprocess + stdio JSON-RPC 通信层
-- [ ] Python 端：sounddevice 录音测试（macOS + Windows）
-- [ ] WAV 文件正确保存（16kHz 单声道）
-- [ ] 基础 UI：录音 / 暂停 / 停止按钮 + 时长显示
-- [ ] 波形可视化（Web Audio API AnalyserNode）
+- [x] 初始化 Electron 项目（Vite + React + TypeScript）
+- [x] 配置 electron-builder 打包（Windows NSIS + macOS DMG）
+- [x] 搭建 Python subprocess + stdio JSON-RPC 通信层
+- [x] Python 端：sounddevice 录音测试（macOS + Windows）
+- [x] WAV 文件正确保存（16kHz 单声道）
+- [x] 基础 UI：录音 / 暂停 / 停止按钮 + 时长显示
+- [x] 波形可视化（Web Audio API AnalyserNode）
 - [ ] FFmpeg 静态二进制集成（处理导入音频格式转换）
 
 ## Phase 2：SenseVoice 转写 + 说话人分割
