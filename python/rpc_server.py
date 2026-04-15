@@ -89,10 +89,22 @@ def handle_request(method, params, rpc_id):
                 'modelCacheSize': get_model_cache_size(),
             }
         elif method == 'capture_start':
+            enable_realtime = params.get('realtime', False)
             result = audio_capture.start_capture(
                 sample_rate=params.get('sampleRate', 16000),
-                channels=params.get('channels', 1)
+                channels=params.get('channels', 1),
+                enable_realtime=enable_realtime
             )
+            recording_id = result['recordingId']
+
+            # 启用实时字幕时同时启动 RealtimeTranscriberPool
+            if enable_realtime and realtime_pool is not None:
+                realtime_pool.start(
+                    recording_id=recording_id,
+                    audio_capture=audio_capture,
+                    language=params.get('language', 'zh')
+                )
+
             return result
         elif method == 'capture_pause':
             audio_capture.pause_capture(params.get('recordingId'))
@@ -101,7 +113,11 @@ def handle_request(method, params, rpc_id):
             audio_capture.resume_capture(params.get('recordingId'))
             return {'status': 'recording'}
         elif method == 'capture_stop':
-            result = audio_capture.stop_capture(params.get('recordingId'))
+            recording_id = params.get('recordingId')
+            # 停止实时转写
+            if realtime_pool is not None:
+                realtime_pool.stop(recording_id)
+            result = audio_capture.stop_capture(recording_id)
             return result
         elif method == 'capture_status':
             return audio_capture.get_status(params.get('recordingId'))
@@ -184,11 +200,12 @@ def handle_request(method, params, rpc_id):
         return {'error': str(e)}
 
 def main():
-    global audio_capture, transcription_service
+    global audio_capture, transcription_service, realtime_pool
 
     # 初始化服务
     audio_capture = AudioCapture()
     transcription_service = TranscriptionService()
+    realtime_pool = RealtimeTranscriberPool()
 
     # 发送初始化消息
     print(json.dumps({'jsonrpc': '2.0', 'method': 'initialized', 'params': {}}), flush=True)
