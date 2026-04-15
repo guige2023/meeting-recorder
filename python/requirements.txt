@@ -3,17 +3,13 @@ sounddevice>=0.4.4
 numpy>=1.24.0
 
 # Database
-db-sqlite3 (built-in)
+# db-sqlite3 is built-in with Python
 
 # Transcription
 funasr>=2.0.0
 
-# Speaker diarization
-pyannote.audio>=3.0.0
-torch>=2.0.0
-
-# Voice activity detection (optional, bundled with funasr)
-# silero-vad (loaded via torch.hub)
-
 # Audio file I/O
 soundfile>=0.12.0
+
+# Scientific computing (MFCC extraction)
+scipy>=1.10.0

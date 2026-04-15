@@ -38,6 +38,17 @@ export interface MeetingDetail {
   segments: Segment[]
 }
 
+export type DateRange = 'all' | 'today' | 'week' | 'month' | 'custom'
+
+export interface SearchFilters {
+  query?: string
+  dateRange?: DateRange
+  customStart?: number
+  customEnd?: number
+  favorites?: boolean | null
+  speakerCount?: number | null
+}
+
 interface MeetingState {
   meetings: Meeting[]
   loading: boolean
@@ -49,7 +60,7 @@ interface MeetingState {
   toggleFavorite: (id: string) => Promise<void>
   updateMeeting: (id: string, updates: Partial<Meeting>) => Promise<void>
   getMeetingDetail: (id: string) => Promise<MeetingDetail | null>
-  searchMeetings: (query: string) => Promise<Meeting[]>
+  searchMeetings: (filters: SearchFilters) => Promise<Meeting[]>
   setProcessingProgress: (meetingId: string, progress: number, message: string) => void
   clearProcessingProgress: (meetingId: string) => void
 }
@@ -132,9 +143,9 @@ export const useMeetingStore = create<MeetingState>((set, get) => ({
     }
   },
 
-  searchMeetings: async (query) => {
+  searchMeetings: async (filters) => {
     try {
-      return await window.electronAPI.pythonCall('search_meetings', { query })
+      return await window.electronAPI.pythonCall('search_meetings', filters)
     } catch (err) {
       console.error('Failed to search meetings:', err)
       return []

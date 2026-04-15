@@ -87,37 +87,28 @@ class TranscriptionService:
         conn.close()
 
     def _load_models(self):
-        """加载模型"""
+        """加载模型（仅转写模型，说话人分割是纯本地实现）"""
         if self.models_loaded:
             return
 
         import sys
 
         try:
-            # 加载 pyannote（说话人分割）
-            try:
-                import torch
-                from pyannote.audio import Pipeline
-
-                device = 'cuda' if torch.cuda.is_available() else 'cpu'
-                self.diarization_pipeline = Pipeline.from_pretrained(
-                    'pyannote/speaker-diarization@2.1'
-                )
-                self.diarization_pipeline.to(torch.device(device))
-                print('pyannote loaded', file=sys.stderr)
-            except Exception as e:
-                print(f'pyannote load error: {e}', file=sys.stderr)
-
-            # 加载 SenseVoice
+            # 加载 SenseVoice（语音转写）
             try:
                 from funasr import AutoModel
+                # 检测 CUDA
+                import torch
+                device = 'cuda' if torch.cuda.is_available() else 'cpu'
                 self.transcription_model = AutoModel(
                     model='iic/SenseVoiceSmall',
-                    device='cpu'  # TODO: 检测 CUDA
+                    device=device
                 )
                 print('SenseVoice loaded', file=sys.stderr)
             except Exception as e:
                 print(f'SenseVoice load error: {e}', file=sys.stderr)
+                import traceback
+                traceback.print_exc()
 
             self.models_loaded = True
 
@@ -179,14 +170,15 @@ class TranscriptionService:
 
         self._send_progress(meeting_id, 0.05, '正在加载模型...')
 
-        # 步骤1: 说话人分割
+        # 步骤1: 说话人分割（完全本地，不依赖外部 API）
         self._send_progress(meeting_id, 0.1, '正在识别说话人...')
         diarization_result = []
-        if self.diarization_pipeline:
-            try:
-                diarization_result = self._run_diarization(file_path)
-            except Exception as e:
-                print(f'Diarization error: {e}', file=sys.stderr)
+        try:
+            diarization_result = self._run_diarization(file_path)
+        except Exception as e:
+            print(f'Diarization error: {e}', file=sys.stderr)
+            import traceback
+            traceback.print_exc()
 
         # 步骤2: 语音转写
         self._send_progress(meeting_id, 0.3, '正在转写...')
@@ -218,19 +210,9 @@ class TranscriptionService:
         self._send_progress(meeting_id, 1.0, '处理完成')
 
     def _run_diarization(self, audio_path: str) -> List[Dict]:
-        """运行说话人分割"""
-        import torch
-
-        diarization = self.diarization_pipeline(audio_path, min_speakers=2, max_speakers=8)
-
-        segments = []
-        for turn, _, speaker in diarization.itertracks(yield_label=True):
-            segments.append({
-                'start': turn.start,
-                'end': turn.end,
-                'speaker': speaker
-            })
-        return segments
+        """运行说话人分割（完全本地实现，不依赖外部 API）"""
+        from diarizer import compute_diarization_local
+        return compute_diarization_local(audio_path, min_speakers=2, max_speakers=8)
 
     def _run_transcription(self, audio_path: str, language: str) -> List[Dict]:
         """运行语音转写"""
@@ -474,19 +456,82 @@ class TranscriptionService:
 
         conn.close()
 
-    def search_meetings(self, query: str) -> List[Dict]:
-        """搜索会议内容"""
+    def search_meetings(self, filters: Dict) -> List[Dict]:
+        """
+        多维过滤搜索会议内容
+
+        Args:
+            filters: {
+                query: str,           # FTS5 搜索关键词，可为空
+                dateRange: str,        # all|today|week|month|custom
+                customStart: int,      # dateRange=custom 时使用
+                customEnd: int,
+                favorites: bool|null,  # null=不限，true=仅收藏
+                speakerCount: int|null # null=不限，数字=最少该数量
+            }
+        """
         conn = sqlite3.connect(DB_PATH)
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
 
-        c.execute('''
-            SELECT DISTINCT m.*
+        conditions = []
+        params = []
+
+        # FTS5 关键词搜索
+        query = filters.get('query', '')
+        if query:
+            # FTS5 MATCH 查询
+            fts_query = ' OR '.join([f'"{term}"*' for term in query.split() if term.strip()])
+            if fts_query:
+                conditions.append('m.id IN (SELECT DISTINCT meeting_id FROM segments_fts WHERE segments_fts MATCH ?)')
+                params.append(fts_query)
+
+        # 日期范围过滤
+        date_range = filters.get('dateRange', 'all')
+        now_ts = datetime.now().timestamp()
+        day_ms = 24 * 60 * 60
+        if date_range == 'today':
+            start_of_day = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0).timestamp()
+            conditions.append('m.created_at >= ?')
+            params.append(start_of_day)
+        elif date_range == 'week':
+            conditions.append('m.created_at >= ?')
+            params.append(now_ts - 7 * day_ms)
+        elif date_range == 'month':
+            conditions.append('m.created_at >= ?')
+            params.append(now_ts - 30 * day_ms)
+        elif date_range == 'custom':
+            custom_start = filters.get('customStart')
+            custom_end = filters.get('customEnd')
+            if custom_start is not None:
+                conditions.append('m.created_at >= ?')
+                params.append(custom_start)
+            if custom_end is not None:
+                conditions.append('m.created_at <= ?')
+                params.append(custom_end)
+
+        # 收藏过滤
+        favorites = filters.get('favorites')
+        if favorites is True:
+            conditions.append('m.favorite = 1')
+        elif favorites is False:
+            conditions.append('m.favorite = 0')
+
+        # 说话人数量过滤
+        speaker_count = filters.get('speakerCount')
+        if speaker_count is not None:
+            conditions.append('m.speaker_count >= ?')
+            params.append(speaker_count)
+
+        # 构建 SQL
+        where_clause = ' AND '.join(conditions) if conditions else '1=1'
+
+        c.execute(f'''
+            SELECT m.*
             FROM meetings m
-            JOIN segments_fts fts ON m.id = fts.meeting_id
-            WHERE segments_fts MATCH ?
+            WHERE {where_clause}
             ORDER BY m.created_at DESC
-        ''', (query,))
+        ''', params)
 
         meetings = []
         for row in c.fetchall():

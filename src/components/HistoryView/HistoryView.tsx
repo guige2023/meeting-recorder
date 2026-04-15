@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react'
-import { Search, Calendar, Users, Clock, Star, Trash2, FileAudio, X, ChevronRight, Copy } from 'lucide-react'
-import { useMeetingStore, MeetingDetail } from '@/stores/meetingStore'
+import { useState, useEffect, useCallback } from 'react'
+import { Search, Calendar, Users, Clock, Star, Trash2, FileAudio, X, ChevronRight, Copy, Filter } from 'lucide-react'
+import { useMeetingStore, MeetingDetail, SearchFilters, DateRange } from '@/stores/meetingStore'
 
 export default function HistoryView() {
   const {
@@ -14,30 +14,48 @@ export default function HistoryView() {
   } = useMeetingStore()
 
   const [searchQuery, setSearchQuery] = useState('')
-  const [filterTimeRange, setFilterTimeRange] = useState('all')
+  const [filterTimeRange, setFilterTimeRange] = useState<DateRange>('all')
+  const [filterFavorites, setFilterFavorites] = useState<boolean | null>(null)
+  const [filterSpeakerCount, setFilterSpeakerCount] = useState<number | null>(null)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<MeetingDetail | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [displayMeetings, setDisplayMeetings] = useState(meetings)
 
   useEffect(() => {
     fetchMeetings()
   }, [])
 
-  const filteredMeetings = meetings.filter(meeting => {
-    if (searchQuery && !meeting.title.toLowerCase().includes(searchQuery.toLowerCase())) {
-      return false
+  // Build filters object
+  const buildFilters = useCallback((): SearchFilters => ({
+    query: searchQuery.trim() || undefined,
+    dateRange: filterTimeRange,
+    favorites: filterFavorites,
+    speakerCount: filterSpeakerCount,
+  }), [searchQuery, filterTimeRange, filterFavorites, filterSpeakerCount])
+
+  // Sync store meetings -> displayMeetings when fetchMeetings completes (filter cleared)
+  useEffect(() => {
+    if (!searchQuery && filterTimeRange === 'all' && filterFavorites === null && filterSpeakerCount === null) {
+      setDisplayMeetings(meetings)
     }
-    if (filterTimeRange !== 'all') {
-      const now = Date.now()
-      const meetingTime = meeting.createdAt
-      const dayMs = 24 * 60 * 60 * 1000
-      if (filterTimeRange === 'today' && now - meetingTime > dayMs) return false
-      if (filterTimeRange === 'week' && now - meetingTime > 7 * dayMs) return false
-      if (filterTimeRange === 'month' && now - meetingTime > 30 * dayMs) return false
-    }
-    return true
-  })
+  }, [meetings, searchQuery, filterTimeRange, filterFavorites, filterSpeakerCount])
+
+  // Debounced search: call backend FTS5 when filters active, else fetch all
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      const filters = buildFilters()
+      const hasFilters = !!(filters.query || filters.dateRange !== 'all' || filters.favorites !== null || filters.speakerCount !== null)
+      if (hasFilters) {
+        const results = await searchMeetings(filters)
+        setDisplayMeetings(results)
+      } else {
+        await fetchMeetings()
+      }
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [searchQuery, filterTimeRange, filterFavorites, filterSpeakerCount])
 
   const handleMeetingClick = async (id: string) => {
     if (id === selectedId) {
@@ -140,12 +158,12 @@ export default function HistoryView() {
       <div className="flex-1 overflow-y-auto space-y-3">
         {loading ? (
           <div className="text-center py-12 text-gray-400">加载中...</div>
-        ) : filteredMeetings.length === 0 ? (
+        ) : displayMeetings.length === 0 ? (
           <div className="text-center py-12 text-gray-400">
-            {searchQuery ? '没有找到匹配的会议' : '暂无会议记录'}
+            {searchQuery || filterFavorites !== null || filterSpeakerCount !== null || filterTimeRange !== 'all' ? '没有找到匹配的会议' : '暂无会议记录'}
           </div>
         ) : (
-          filteredMeetings.map(meeting => (
+          displayMeetings.map(meeting => (
             <div key={meeting.id}>
               <div
                 className={`bg-white rounded-xl p-4 shadow-sm hover:shadow-md transition-all cursor-pointer ${selectedId === meeting.id ? 'ring-2 ring-primary-300' : ''}`}

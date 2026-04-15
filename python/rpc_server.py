@@ -70,7 +70,7 @@ def handle_request(method, params, rpc_id):
             transcription_service.update_meeting(params['id'], params.get('updates', {}))
             return {'status': 'updated'}
         elif method == 'search_meetings':
-            return transcription_service.search_meetings(params.get('query', ''))
+            return transcription_service.search_meetings(params)
         else:
             return {'error': f'Unknown method: {method}'}
     except Exception as e:
