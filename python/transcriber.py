@@ -14,22 +14,32 @@ from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional
 
-# 数据库路径
-DB_PATH = os.path.join(os.path.dirname(__file__), '..', 'data', 'meetings.db')
+# 数据库路径（由 __init__ 注入，见 _DATA_DIR 全局变量）
+DATA_DIR: str = None  # type: ignore
+
+def _get_db_path() -> str:
+    if DATA_DIR:
+        return os.path.join(DATA_DIR, 'meetings.db')
+    # fallback：相对于脚本目录（兼容开发模式）
+    return os.path.join(os.path.dirname(__file__), '..', 'data', 'meetings.db')
 
 class TranscriptionService:
-    def __init__(self):
+    def __init__(self, data_dir: str = None):
+        global DATA_DIR
+        if data_dir:
+            DATA_DIR = data_dir
         self.transcription_model = None
         self.models_loaded = False
         self._init_db()
 
     def _init_db(self):
         """初始化数据库"""
-        db_dir = os.path.dirname(DB_PATH)
+        db_path = _get_db_path()
+        db_dir = os.path.dirname(db_path)
         if db_dir and not os.path.exists(db_dir):
             os.makedirs(db_dir)
 
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(_get_db_path())
         c = conn.cursor()
 
         c.execute('''
@@ -152,7 +162,7 @@ class TranscriptionService:
             duration = 0
 
         # 创建会议记录
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(_get_db_path())
         c = conn.cursor()
         c.execute('''
             INSERT INTO meetings (id, title, created_at, audio_path, status, duration)
@@ -191,7 +201,7 @@ class TranscriptionService:
         self._save_to_db(meeting_id, merged_result, diarization_result)
 
         # 更新状态
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(_get_db_path())
         c = conn.cursor()
         c.execute(
             'UPDATE meetings SET status = ? WHERE id = ?',
@@ -292,7 +302,7 @@ class TranscriptionService:
 
     def _save_to_db(self, meeting_id: str, merged: List[Dict], diarization: List[Dict]):
         """保存结果到数据库"""
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(_get_db_path())
         c = conn.cursor()
 
         speakers = list(set(m['speaker'] for m in merged))
@@ -328,7 +338,7 @@ class TranscriptionService:
 
     def get_meetings(self) -> Dict:
         """获取所有会议"""
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(_get_db_path())
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
 
@@ -356,7 +366,7 @@ class TranscriptionService:
 
     def get_meeting_detail(self, meeting_id: str) -> Optional[Dict]:
         """获取会议详情（含转写内容 + 发言时长统计）"""
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(_get_db_path())
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
 
@@ -404,7 +414,7 @@ class TranscriptionService:
 
     def delete_meeting(self, meeting_id: str):
         """删除会议"""
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(_get_db_path())
         c = conn.cursor()
 
         c.execute('SELECT id FROM segments WHERE meeting_id = ?', (meeting_id,))
@@ -420,7 +430,7 @@ class TranscriptionService:
 
     def toggle_favorite(self, meeting_id: str):
         """切换收藏状态"""
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(_get_db_path())
         c = conn.cursor()
         c.execute('UPDATE meetings SET favorite = NOT favorite WHERE id = ?', (meeting_id,))
         conn.commit()
@@ -428,7 +438,7 @@ class TranscriptionService:
 
     def update_meeting(self, meeting_id: str, updates: Dict):
         """更新会议信息（标题、标签、备注）"""
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(_get_db_path())
         c = conn.cursor()
 
         allowed_fields = ['title', 'notes', 'tags']
@@ -457,7 +467,7 @@ class TranscriptionService:
 
     def update_speaker(self, speaker_id: str, updates: Dict):
         """更新说话人信息（名称、颜色）"""
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(_get_db_path())
         c = conn.cursor()
         allowed = ['name', 'color']
         set_clause = []
@@ -474,7 +484,7 @@ class TranscriptionService:
 
     def search_meetings(self, filters: Dict) -> List[Dict]:
         """多维过滤搜索"""
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(_get_db_path())
         conn.row_factory = sqlite3.Row
         c = conn.cursor()
 
@@ -550,7 +560,7 @@ class TranscriptionService:
 
     def clear_all_data(self):
         """清除所有数据"""
-        conn = sqlite3.connect(DB_PATH)
+        conn = sqlite3.connect(_get_db_path())
         c = conn.cursor()
         c.execute('DELETE FROM segments')
         c.execute('DELETE FROM speakers')

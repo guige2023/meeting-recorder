@@ -17,10 +17,11 @@ from collections import deque
 from datetime import datetime
 
 class AudioCapture:
-    def __init__(self):
+    def __init__(self, data_dir: str = None):
         self.recordings = {}  # recording_id -> RecordingState
         self.stream = None
         self.lock = threading.Lock()
+        self._data_dir = data_dir or os.path.join(os.path.dirname(__file__), '..', 'data')
 
     def start_capture(self, sample_rate=16000, channels=1, enable_realtime=False):
         """
@@ -227,10 +228,11 @@ class AudioCapture:
         }
 
     def _get_wav_path(self, recording_id):
-        """获取 WAV 文件路径"""
-        import tempfile
-        temp_dir = tempfile.gettempdir()
+        """获取 WAV 文件路径，按月份归档到 data/YYYY-MM/"""
+        month_dir = datetime.now().strftime('%Y-%m')
+        save_dir = os.path.join(self._data_dir, month_dir)
+        os.makedirs(save_dir, exist_ok=True)
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        return os.path.join(temp_dir, f'meeting_{timestamp}_{recording_id[:8]}.wav')
+        return os.path.join(save_dir, f'meeting_{timestamp}_{recording_id[:8]}.wav')
 
 import sys

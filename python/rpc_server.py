@@ -14,6 +14,12 @@ import zipfile
 import tempfile
 import datetime as dt
 
+# 解析命令行参数
+_DATA_DIR = None
+for arg in sys.argv[1:]:
+    if arg.startswith('--data-dir='):
+        _DATA_DIR = arg.split('=', 1)[1]
+
 def _fmt_ss(seconds):
     m = int(seconds // 60); s = int(seconds % 60)
     return f'{m}:{s:02d}'
@@ -323,8 +329,8 @@ def main():
     else:
         # 依赖正常，初始化服务（捕获所有异常，防止单模块崩溃导致进程退出）
         try:
-            audio_capture = _audio_capture_cls()
-            transcription_service = _transcription_service_cls()
+            audio_capture = _audio_capture_cls(data_dir=_DATA_DIR)
+            transcription_service = _transcription_service_cls(data_dir=_DATA_DIR)
             realtime_pool = _realtime_pool_cls()
         except Exception as e:
             import sys as _sys

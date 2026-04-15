@@ -30,18 +30,20 @@ function getResourcePath(relative: string): string {
   return join(__dirname, '..', relative)
 }
 
-function getPythonPath(): string {
+function getBundledPythonDir(): string {
+  // bundled-python/ 目录：dev 时在项目根，packaged 时在 extraResources
   if (app.isPackaged) {
-    return join(process.resourcesPath, 'python', 'rpc_server.py')
+    return join(process.resourcesPath, 'bundled-python')
   }
-  return join(__dirname, '..', 'python', 'rpc_server.py')
+  return join(__dirname, '..', '..', 'bundled-python')
+}
+
+function getPythonPath(): string {
+  return join(getBundledPythonDir(), 'rpc_server.py')
 }
 
 function getPythonDir(): string {
-  if (app.isPackaged) {
-    return join(process.resourcesPath, 'python')
-  }
-  return join(__dirname, '..', 'python')
+  return getBundledPythonDir()
 }
 
 function createWindow() {
@@ -265,9 +267,13 @@ function startPythonServer() {
     return
   }
 
-  const pythonCmd = process.platform === 'win32' ? 'python' : 'python3'
+  // 使用 bundled-python 中的 Python 可执行文件
+  const pythonExeDir = getBundledPythonDir()
+  const pythonCmd = process.platform === 'win32'
+    ? join(pythonExeDir, 'python.exe')
+    : join(pythonExeDir, 'bin', 'python')
 
-  pythonProcess = spawn(pythonCmd, [pythonScript], {
+  pythonProcess = spawn(pythonCmd, [pythonScript, `--data-dir=${app.getPath('userData')}`], {
     cwd: pythonDir,
     stdio: ['pipe', 'pipe', 'pipe']
   })
