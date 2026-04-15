@@ -16,7 +16,7 @@ export default function HistoryView() {
     getMeetingDetail,
     searchMeetings,
     setProcessingProgress,
-    clearProcessingProgress,
+    clearProcessingProgress
   } = useMeetingStore()
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -548,8 +548,6 @@ function MeetingDetailView({
   const [speakerNameValue, setSpeakerNameValue] = useState('')
   const [showAudioPlayer, setShowAudioPlayer] = useState(false)
   const { updateMeeting, updateSpeaker } = useMeetingStore()
-  const { importMeeting } = useMeetingStore()
-  const { setProcessingProgress, clearProcessingProgress } = useMeetingStore()
 
   if (detail.segments.length === 0) return <div className="text-center py-8 text-gray-400 dark:text-gray-500">暂无转写内容</div>
 

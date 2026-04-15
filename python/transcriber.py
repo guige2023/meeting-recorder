@@ -194,29 +194,30 @@ class TranscriptionService:
         if not self.models_loaded:
             self._load_models()
 
-        if not meeting_id:
+        # 如果没有传入 meeting_id，说明是从零创建，需要先插入记录
+        new_meeting = meeting_id is None
+        if new_meeting:
             meeting_id = str(uuid.uuid4())
+            now = datetime.now()
+            timestamp = now.timestamp()
 
-        now = datetime.now()
-        timestamp = now.timestamp()
+            # 获取音频时长
+            try:
+                import soundfile as sf
+                audio_info = sf.info(file_path)
+                duration = audio_info.duration
+            except:
+                duration = 0
 
-        # 获取音频时长
-        try:
-            import soundfile as sf
-            audio_info = sf.info(file_path)
-            duration = audio_info.duration
-        except:
-            duration = 0
-
-        # 创建会议记录
-        conn = sqlite3.connect(_get_db_path())
-        c = conn.cursor()
-        c.execute('''
-            INSERT INTO meetings (id, title, created_at, audio_path, status, duration)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (meeting_id, f'会议 {now.strftime("%Y-%m-%d %H:%M")}', timestamp, file_path, 'processing', duration))
-        conn.commit()
-        conn.close()
+            # 创建会议记录
+            conn = sqlite3.connect(_get_db_path())
+            c = conn.cursor()
+            c.execute('''
+                INSERT INTO meetings (id, title, created_at, audio_path, status, duration)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (meeting_id, f'会议 {now.strftime("%Y-%m-%d %H:%M")}', timestamp, file_path, 'processing', duration))
+            conn.commit()
+            conn.close()
 
         self._send_progress(meeting_id, 0.05, '正在加载模型...')
 
