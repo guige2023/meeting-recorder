@@ -30,7 +30,7 @@ def check_dependencies():
     required = {
         'sounddevice': 'sounddevice>=0.4.4',
         'numpy': 'numpy>=1.24.0',
-        'funasr': 'funasr>=2.0.0',
+        'funasr': 'funasr>=1.0.0',
         'soundfile': 'soundfile>=0.12.0',
         'scipy': 'scipy>=1.10.0',
     }
