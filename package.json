@@ -54,8 +54,8 @@
     ],
     "extraResources": [
       {
-        "from": "python",
-        "to": "python"
+        "from": "bundled-python",
+        "to": "bundled-python"
       },
       {
         "from": "resources",

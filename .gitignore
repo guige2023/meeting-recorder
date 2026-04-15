@@ -1,0 +1,21 @@
+# Bundled Python environment (614MB+, downloaded separately)
+bundled-python/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.so
+
+# Electron build outputs
+release/
+dist/
+out/
+
+# Node modules
+node_modules/
+
+# macOS
+.DS_Store
+
+# Logs
+*.log

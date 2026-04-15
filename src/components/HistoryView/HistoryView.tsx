@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
-import { Search, Calendar, Users, Clock, Star, Trash2, FileAudio, X, ChevronRight, Copy, Filter, Tag, Edit3, Check, AudioLines } from 'lucide-react'
+import { Search, Calendar, Users, Clock, Star, Trash2, FileAudio, X, ChevronRight, Copy, Filter, Tag, Edit3, Check, AudioLines, Mic } from 'lucide-react'
 import { useMeetingStore, MeetingDetail, SearchFilters, DateRange, Segment } from '@/stores/meetingStore'
 import AudioPlayer from './AudioPlayer'
 import BatchExportModal from './BatchExportModal'
@@ -155,8 +155,48 @@ export default function HistoryView() {
 
   const segmentsBySpeaker = detail ? groupSegmentsBySpeaker(detail.segments) : {}
 
+  // --- Duration statistics from meetings data ---
+  const totalCount = meetings.length
+  const totalDuration = meetings.reduce((sum, m) => sum + (m.duration || 0), 0)
+  const avgDuration = totalCount > 0 ? totalDuration / totalCount : 0
+  const now = new Date()
+  const thisMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`
+  const monthDuration = meetings
+    .filter(m => {
+      const d = new Date(m.createdAt)
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}` === thisMonth
+    })
+    .reduce((sum, m) => sum + (m.duration || 0), 0)
+
+  const fmt = (seconds: number) => {
+    if (seconds < 60) return `${Math.round(seconds)}秒`
+    const h = Math.floor(seconds / 3600)
+    const m = Math.floor((seconds % 3600) / 60)
+    if (h > 0) return `${h}小时${m}分钟`
+    return `${m}分钟`
+  }
+
+  const statCards = [
+    { icon: <Mic size={18} />, label: '录音次数', value: `${totalCount} 次`, bg: 'bg-blue-50 dark:bg-blue-950', text: 'text-blue-600 dark:text-blue-300' },
+    { icon: <Clock size={18} />, label: '总时长', value: fmt(totalDuration), bg: 'bg-purple-50 dark:bg-purple-950', text: 'text-purple-600 dark:text-purple-300' },
+    { icon: <Calendar size={18} />, label: '本月时长', value: fmt(monthDuration), bg: 'bg-green-50 dark:bg-green-950', text: 'text-green-600 dark:text-green-300' },
+  ]
+
   return (
     <div className="h-full flex flex-col p-6">
+      {/* Duration stats */}
+      <div className="grid grid-cols-3 gap-3 mb-6">
+        {statCards.map(card => (
+          <div key={card.label} className={`flex items-center gap-3 px-4 py-3 rounded-xl ${card.bg}`}>
+            <div className={`flex-shrink-0 ${card.text}`}>{card.icon}</div>
+            <div>
+              <div className="text-xs text-gray-500 dark:text-gray-400">{card.label}</div>
+              <div className={`font-semibold text-sm ${card.text}`}>{card.value}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* Search and Filter */}
       <div className="flex flex-wrap gap-3 mb-6">
         <div className="flex-1 min-w-[200px] relative">
