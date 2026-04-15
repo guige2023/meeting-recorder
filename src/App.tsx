@@ -136,9 +136,23 @@ function App() {
 
       {/* Main Content */}
       <main className="flex-1 overflow-hidden">
-        {activeTab === 'recorder' && <RecorderView />}
-        {activeTab === 'history' && <HistoryView />}
-        {activeTab === 'settings' && <SettingsView />}
+        {!pythonReady && !envError ? (
+          <div className="h-full flex flex-col items-center justify-center gap-4">
+            <div className="w-10 h-10 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" />
+            <div className="text-center">
+              <p className="text-gray-700 dark:text-gray-200 font-medium">正在启动录音服务...</p>
+              <p className="text-sm text-gray-400 mt-1">
+                {modelDownload ? modelDownload.slice(-80) : '初始化 Python 环境'}
+              </p>
+            </div>
+          </div>
+        ) : (
+          <>
+            {activeTab === 'recorder' && <RecorderView />}
+            {activeTab === 'history' && <HistoryView />}
+            {activeTab === 'settings' && <SettingsView />}
+          </>
+        )}
       </main>
     </div>
   )
