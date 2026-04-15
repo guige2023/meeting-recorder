@@ -1,135 +1,108 @@
-# MeetingRecorder
+# MeetingRecorder - 本地会议录音与转写
 
-本地会议录音 + 说话人识别 + 语音转写工具。
+**完全离线的桌面会议录音应用**。支持 macOS 和 Windows，自动识别不同发言人，将会议录音转为文字记录。
 
-支持 Windows 和 macOS，数据完全保存在本地。
+## 功能
 
-## 功能特性
+- **本地录音** — 系统麦克风实时采集，WebRTC/VAD 降噪
+- **说话人分离** — Silero-VAD + MFCC 聚类，自动识别不同发言人
+- **语音转写** — FunASR SenseVoice 模型，100% 本地运行
+- **实时字幕** — 录音时实时输出文字（可选）
+- **历史管理** — SQLite 存储，搜索、标签、导出
+- **导出格式** — JSON、SRT 字幕、纯文本
+- **深色模式** — 支持明暗主题切换
+- **系统托盘** — 后台录音，悬浮球控制
+- **全局快捷键** — 录音/停止快捷键
 
-### Phase 1 · 核心录音
-- **本地录音**：sounddevice 直接从麦克风录制，WAV 格式 16kHz 单声道
-- **说话人分割**：Silero VAD + MFCC 层次聚类，纯本地无需外部 API
-- **语音转写**：阿里 FunASR SenseVoice Small，中文识别优秀
-- **按人聚合**：识别不同说话人，转写结果按人分组展示
-- **全文搜索**：SQLite FTS5，搜索会议内容，300ms 防抖
+## 技术栈
 
-### Phase 2 · 导入与格式
-- **多格式导入**：mp3 / m4a / wav / flac / ogg / aac / wma / ape / opus
-- **自动转写**：导入后自动触发说话人分割 + 转写流程
-
-### Phase 3 · 桌面体验
-- **Electron 桌面**：窗口管理、系统菜单、IPC 通信
-- **深色模式**：跟随系统 / 手动切换，tailwindcss dark class
-- **系统托盘**：录音状态显示、最小化到托盘、快捷操作
-- **全局快捷键**：⌘⇧R 开始/停止录音（macOS）
-- **首次引导**：欢迎页 + 操作说明
-
-### Phase 4 · 实时字幕
-- **实时字幕**：录音同时显示字幕流
-- **字幕跟随**：当前说话人高亮
-
-### Phase 5 · 播放与编辑
-- **音频播放器**：Web Audio API 播放，带进度条和倍速
-- **发言统计**：各说话人时长占比
-- **标题编辑**：点击直接修改会议标题
-- **发言人人名编辑**：重命名说话人标签
-- **标签管理**：为会议添加/删除标签
-
-### Phase 6 · 导出
-- **单会议导出**：TXT / Markdown / JSON / SRT（字幕）
-- **批量导出**：勾选多个会议，一次性打包为 ZIP（含 json/txt/md/srt/wav）
-
-### Phase 7 · 系统集成
-- **系统托盘**：图标路径修复、动态菜单、录音状态切换
-- **深色模式开关**：Settings 界面实时切换，nativeTheme 同步
-- **主题监听**：跟随系统主题变化自动切换
-
-### Phase 8 · 打包发布
-- **macOS DMG**：arm64 + x64，APFS 格式，97MB
-- **版本管理**：semver 规范，v1.0.1
-
----
-
-**跨平台**：macOS (.dmg) + Windows (.exe)
-
-## 技术架构
-
-```
-React + TypeScript + Vite (前端)
-        ↓ IPC
-  Electron 主进程
-        ↓ stdio JSON-RPC
-  Python RPC Server
-   ┌────┴────┐
-   ↓         ↓
-AudioCapture  TranscriptionService
-(sounddevice)  ├─ Silero VAD（本地，说话人分割）
-   ↓          └─ SenseVoice（阿里，中文转写）
-WAV 16kHz         ↓
-              SQLite（按人聚合）
-```
-
-## 技术选型
-
-| 模块 | 技术 |
+| 层级 | 技术 |
 |------|------|
-| 桌面框架 | Electron 33 |
-| 前端 | React 18 + TypeScript + Vite |
-| 状态管理 | Zustand |
-| 录音 | sounddevice |
-| 说话人分割 | Silero VAD + MFCC + 层次聚类（纯本地） |
-| 语音转写 | FunASR SenseVoice Small |
-| 数据库 | SQLite + FTS5 |
+| 桌面框架 | Electron 33 + Vite |
+| 前端 | React 18 + TypeScript + TailwindCSS + Zustand |
+| 后端 | Python 3.9（bundled）|
+| ASR 模型 | FunASR 1.3.1 / SenseVoiceSmall |
+| VAD | Silero-VAD（本地）|
+| 说话人分离 | Silero-VAD + MFCC + BIC/AHC 聚类 |
+| 构建 | electron-builder（DMG + NSIS）|
 
-## 安装依赖
+## 下载安装包
 
-```bash
-# 克隆项目
-cd meeting-recorder
+### macOS
+- `release/MeetingRecorder-*-arm64.dmg` — Apple Silicon（M系列芯片）
+- `release/MeetingRecorder-*-x64.dmg` — Intel 芯片（需单独构建）
 
-# 安装 Node 依赖
-npm install
+### Windows
+- `release/MeetingRecorder Setup *.exe` — NSIS 安装包
 
-# 安装 Python 依赖
-pip install -r python/requirements.txt
-```
+**安装包已包含完整的 Python 运行时和 AI 模型，无需用户手动安装任何依赖。**
+
+## 模型说明
+
+以下模型已打包在安装包内（约 1GB）：
+
+| 模型 | 大小 | 用途 |
+|------|------|------|
+| SenseVoiceSmall | ~888 MB | 语音识别 |
+| Silero-VAD | ~34 MB | 语音活动检测 |
 
 ## 开发
 
+### 环境要求
+
+- Node.js 18+
+- Python 3.9+（仅用于本地开发调试）
+- macOS 12+ 或 Windows 10+
+
+### 本地开发
+
 ```bash
+# 安装依赖
+npm install
+
+# 安装 Python 依赖（仅开发时）
+pip install sounddevice numpy funasr torch torchaudio soundfile scipy
+
+# 启动开发服务器
 npm run dev
 ```
 
-## 打包
+### 完整打包
 
 ```bash
-# macOS
-npm run build
-
-# Windows
-npm run build:win
+npm run build        # 构建 macOS DMG + Windows EXE
 ```
 
-## 使用说明
+### 关键文件
 
-### 录音
-1. 点击「开始录音」
-2. 录音结束后点击「停止」
-3. 系统自动进行说话人分割 + 转写
-4. 在历史记录中查看结果
+```
+├── electron/          Electron 主进程
+├── src/               React 前端
+├── python/            Python 后端（录音、VAD、ASR、说话人分离）
+├── bundled-python/    打包的 Python 运行时
+├── models/            AI 模型（SenseVoice + Silero-VAD）
+└── release/           构建产物
+```
 
-### 导入音频
-支持 mp3 / m4a / wav / flac / ogg 等格式，自动处理并转写。
+### 架构说明
 
-### 搜索
-在历史记录页搜索框输入关键词，搜索转写内容。
+- **Electron 主进程** 启动 Python 子进程，通过 stdio JSON-RPC 通信
+- **Python 后端**：`rpc_server.py` 是入口，管理 VAD、ASR、说话人分离模块
+- **模型路径**：生产环境从 `app.resourcesPath/models/` 加载，开发环境从项目根目录 `models/` 加载
+- **环境变量**：`CUDA_VISIBLE_DEVICES=''`（强制 CPU）、`MODELSCOPE_CACHE`、`TORCH_HUB_DIR`
 
-### 导出
-点击展开会议详情，选择「导出 TXT」或「导出 Markdown」。
+## 录音流程
 
-## 注意事项
+```
+麦克风 → sounddevice 采集 → VAD（Silero）→ 语音段切分
+                                          ↓
+                               说话人分离（MFCC 聚类）
+                                          ↓
+                               语音段 + 说话人标签 → SenseVoice 转写
+                                          ↓
+                                    文本 + 时间戳 → Electron（JSON-RPC）
+```
 
-- 首次运行 SenseVoice 模型会自动下载（约 200MB）
-- Python 3.8+ 推荐
-- macOS 需要授予麦克风权限
-- Windows 需要安装 Python（建议 3.9+）
+## License
+
+MIT
