@@ -15,6 +15,7 @@ interface RecorderState {
   realtimeCaptions: Caption[]
   speakersCount: number
   recordingId: string | null
+  vadStatus: 'idle' | 'detecting' | 'speech'  // VAD 语音检测状态
   startRecording: () => Promise<void>
   pauseRecording: () => Promise<void>
   resumeRecording: () => Promise<void>
@@ -32,6 +33,7 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
   realtimeCaptions: [],
   speakersCount: 0,
   recordingId: null,
+  vadStatus: 'idle',
 
   startRecording: async () => {
     try {
@@ -139,5 +141,9 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
 
   setSpeakersCount: (count) => {
     set({ speakersCount: count })
+  },
+
+  setVadStatus: (status: 'idle' | 'detecting' | 'speech') => {
+    set({ vadStatus: status })
   }
 }))

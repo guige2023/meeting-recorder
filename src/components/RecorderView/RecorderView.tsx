@@ -248,7 +248,11 @@ export default function RecorderView() {
           <div className="flex items-center justify-between mb-4">
             <h3 className="font-medium text-gray-700">实时字幕</h3>
           </div>
-          <RealtimeCaptions captions={realtimeCaptions} />
+          <RealtimeCaptions
+            captions={realtimeCaptions}
+            audioLevel={audioLevel}
+            isRecording={status === 'recording'}
+          />
         </div>
       )}
 
