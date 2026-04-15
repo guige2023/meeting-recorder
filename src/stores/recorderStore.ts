@@ -15,11 +15,11 @@ interface RecorderState {
   realtimeCaptions: Caption[]
   speakersCount: number
   recordingId: string | null
-
   startRecording: () => Promise<void>
   pauseRecording: () => Promise<void>
   resumeRecording: () => Promise<void>
   stopRecording: () => Promise<void>
+  toggleRecording: () => Promise<void>
   updateAudioLevel: (level: number) => void
   addCaption: (caption: Omit<Caption, 'id'>) => void
   setSpeakersCount: (count: number) => void
@@ -47,7 +47,6 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
         speakersCount: 0
       })
 
-      // 开始监听状态更新
       window.electronAPI.onCaptureStatus((data) => {
         if (data.recordingId !== get().recordingId) return
         set({
@@ -99,7 +98,6 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
         recordingId: get().recordingId
       })
 
-      // 自动触发转写（后台进行，不阻塞）
       if (result?.filePath) {
         window.electronAPI.pythonCall('process_file', {
           filePath: result.filePath,
@@ -115,6 +113,15 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
     } catch (err) {
       console.error('Failed to stop recording:', err)
       set({ status: 'idle' })
+    }
+  },
+
+  toggleRecording: async () => {
+    const { status, startRecording, stopRecording } = get()
+    if (status === 'idle') {
+      await startRecording()
+    } else if (status === 'recording' || status === 'paused') {
+      await stopRecording()
     }
   },
 

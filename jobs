@@ -1,5 +1,64 @@
 # 已完成任务记录
 
+## 2026-04-15 Phase 4：结果查看 & 编辑（音频播放器 + 时间线同步 + 饼图）
+
+**完成时间**：2026-04-15
+
+**改动概要**：
+- electron/main.ts: 新增 `get_audio_url` IPC handler（file:// URL 转换）
+- electron/preload.ts: 暴露 `getAudioUrl` 到渲染进程
+- src/types/electron.d.ts: 新增 `getAudioUrl` 类型声明
+- src/components/HistoryView/AudioPlayer.tsx: 新增音频播放器组件（播放/暂停/进度拖拽/倍速 0.5x-2x/静音）
+- src/components/HistoryView/SpeakingTimeChart.tsx: 新增发言时长统计饼图（SVG donut chart + 条形图）
+- HistoryView.tsx: 集成 AudioPlayer + SpeakingTimeChart + 时间线同步高亮
+  - 播放时自动高亮当前片段（蓝色背景）
+  - 自动滚动到当前片段
+  - 点击任意片段跳转到该时间点
+  - 发言统计可折叠/展开
+
+**验证结果**：
+- ✅ `npm run build` 全量编译通过
+- ✅ macOS DMG 打包成功：release/MeetingRecorder-1.0.0-arm64.dmg
+
+**文件变更**：
+- 新增：src/components/HistoryView/AudioPlayer.tsx
+- 新增：src/components/HistoryView/SpeakingTimeChart.tsx
+- 修改：electron/main.ts（新增 get_audio_url handler）
+- 修改：electron/preload.ts（暴露 getAudioUrl）
+- 修改：src/types/electron.d.ts（新增类型）
+- 修改：src/components/HistoryView/HistoryView.tsx（集成播放器+同步+饼图）
+- commit: 844951fe "feat(audio): add get_audio_url IPC handler + AudioPlayer component (play/pause/seek/0.5x-2x speed)"
+
+---
+
+## 2026-04-15 Phase 3：历史记录 & 搜索（FTS5 + 多维筛选）
+
+**完成时间**：2026-04-15
+
+**改动概要**：
+- 后端 transcriber.py: `search_meetings` 扩展为多维过滤（query FTS5 / dateRange / favorites / speakerCount）
+- 后端 rpc_server.py: `search_meetings` 传递完整 filters 对象
+- 前端 meetingStore.ts: `SearchFilters` 类型 + `searchMeetings(filters)` 调用
+- 前端 HistoryView.tsx:
+  - 搜索框接入后端 FTS5 全文搜索（debounce 300ms）
+  - 新增说话人数量筛选器（1人+/2人+/...）
+  - 新增收藏筛选器（全部/已收藏/未收藏，三态切换按钮）
+  - 新增"清除筛选"按钮
+  - 筛选条件变化时调用后端搜索，否则调用 fetchMeetings
+
+**验证结果**：
+- ✅ `npm run build` 全量编译通过
+- ✅ macOS DMG 打包成功
+
+**文件变更**：
+- 修改：python/transcriber.py（search_meetings 多维过滤）
+- 修改：python/rpc_server.py
+- 修改：src/stores/meetingStore.ts
+- 修改：src/components/HistoryView/HistoryView.tsx
+- commit: bb8608c1 "Phase 3: FTS5全文搜索 + 多维筛选器（日期/收藏/说话人数）+ 前端接入"
+
+---
+
 ## 2026-04-15 Phase 2：SenseVoice 转写 + pyannote 说话人分割 + 完整 UI
 
 **完成时间**：2026-04-15

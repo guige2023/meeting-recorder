@@ -18,6 +18,7 @@ export interface Speaker {
   label: string
   name: string
   color: string
+  total_duration?: number
 }
 
 export interface Segment {
@@ -52,7 +53,6 @@ export interface SearchFilters {
 interface MeetingState {
   meetings: Meeting[]
   loading: boolean
-  // 处理进度: meetingId -> { progress: number, message: string }
   processingProgress: Record<string, { progress: number; message: string }>
 
   fetchMeetings: () => Promise<void>
@@ -63,6 +63,9 @@ interface MeetingState {
   searchMeetings: (filters: SearchFilters) => Promise<Meeting[]>
   setProcessingProgress: (meetingId: string, progress: number, message: string) => void
   clearProcessingProgress: (meetingId: string) => void
+  updateSpeaker: (speakerId: string, updates: Partial<Speaker>) => Promise<void>
+  clearCache: () => Promise<{ cleared: number }>
+  clearData: () => Promise<void>
 }
 
 export const useMeetingStore = create<MeetingState>((set, get) => ({
@@ -167,5 +170,26 @@ export const useMeetingStore = create<MeetingState>((set, get) => ({
       delete next[meetingId]
       return { processingProgress: next }
     })
+  },
+
+  updateSpeaker: async (speakerId, updates) => {
+    try {
+      await window.electronAPI.pythonCall('update_meeting', {
+        id: null,
+        updates: { speakerUpdates: { [speakerId]: updates } }
+      })
+    } catch (err) {
+      console.error('Failed to update speaker:', err)
+    }
+  },
+
+  clearCache: async () => {
+    const result = await window.electronAPI.pythonCall('clear_cache', {})
+    return result || { cleared: 0 }
+  },
+
+  clearData: async () => {
+    await window.electronAPI.pythonCall('clear_data', {})
+    set({ meetings: [] })
   }
 }))
