@@ -102,9 +102,9 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
         recordingId: get().recordingId
       })
 
-      if (result?.filePath) {
+      if (result?.wavPath) {
         window.electronAPI.pythonCall('process_file', {
-          filePath: result.filePath,
+          filePath: result.wavPath,
           language: 'zh'
         }).catch(err => console.error('process_file error:', err))
       }

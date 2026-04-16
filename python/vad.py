@@ -31,7 +31,7 @@ class VAD:
                 model='silero_vad',
                 trust_repo=True
             )
-            self.get_speech_timestamps = utils[0]
+            self._get_st_func = utils[0]
             self.models_loaded = True
             print('Silero-VAD model loaded', file=sys.stderr)
         except ImportError as e:
@@ -103,7 +103,8 @@ class VAD:
                 audio = audio.astype(np.float32)
 
             # 获取语音时间戳
-            timestamps = self.get_speech_timestamps(
+            timestamps = self._get_st_func(
+                self.model,
                 audio,
                 threshold=threshold,
                 min_speech_duration_ms=min_speech_duration_ms,

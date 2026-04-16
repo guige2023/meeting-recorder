@@ -296,6 +296,8 @@ function startPythonServer() {
       // 让 modelscope 和 torch 从 bundled models/ 读取模型
       'MODELSCOPE_CACHE': modelCacheDir,
       'TORCH_HUB_DIR': torchHubDir,
+      // 让系统 Python 能找到 bundled-python 的 site-packages
+      'PYTHONPATH': join(pythonDir, 'lib', 'python3.9', 'site-packages'),
     }
   })
 
