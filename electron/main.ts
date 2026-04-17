@@ -21,7 +21,7 @@ let pendingRequests = new Map<number, { resolve: (v: any) => void; reject: (e: a
 let nextRequestId = 1
 let isQuitting = false
 
-const isDev = process.env.NODE_ENV !== 'production' || !app.isPackaged
+const isDev = !app.isPackaged
 
 function getResourcePath(relative: string): string {
   if (app.isPackaged) {

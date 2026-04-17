@@ -71,8 +71,12 @@ class VAD:
             if audio_chunk.dtype != np.float32:
                 audio_chunk = audio_chunk.astype(np.float32)
 
+            # 转换为 PyTorch Tensor（Silero VAD 需要 Tensor，不是 ndarray）
+            import torch
+            audio_tensor = torch.from_numpy(audio_chunk)
+
             # 调用 Silero VAD
-            speech_prob = self.model(audio_chunk, self.sample_rate).item()
+            speech_prob = self.model(audio_tensor, self.sample_rate).item()
             return speech_prob > threshold
 
         except Exception as e:

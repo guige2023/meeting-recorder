@@ -144,7 +144,8 @@ class AudioCapture:
 
         while recording['status'] != 'stopped':
             if recording['status'] == 'recording':
-                duration = time.time() - recording['start_time'] - recording['total_paused']
+                duration = float(time.time() - recording['start_time'] - recording['total_paused'])
+                audio_level = float(recording.get('audio_level', 0))
                 status_msg = {
                     'jsonrpc': '2.0',
                     'method': 'capture_status',
@@ -152,7 +153,7 @@ class AudioCapture:
                         'recordingId': recording_id,
                         'status': 'recording',
                         'duration': duration,
-                        'audioLevel': recording.get('audio_level', 0),
+                        'audioLevel': audio_level,
                         'speakersCount': 0
                     }
                 }
