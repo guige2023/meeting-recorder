@@ -41,6 +41,8 @@ export interface MeetingDetail {
 
 export type DateRange = 'all' | 'today' | 'week' | 'month' | 'custom'
 
+export type DurationRange = 'all' | 'under10' | '10to30' | 'over30'
+
 export interface SearchFilters {
   query?: string
   dateRange?: DateRange
@@ -48,6 +50,7 @@ export interface SearchFilters {
   customEnd?: number
   favorites?: boolean | null
   speakerCount?: number | null
+  durationRange?: DurationRange
 }
 
 interface MeetingState {

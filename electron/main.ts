@@ -35,7 +35,8 @@ function getBundledPythonDir(): string {
   if (app.isPackaged) {
     return join(process.resourcesPath, 'bundled-python')
   }
-  return join(__dirname, '..', '..', 'bundled-python')
+  // __dirname = dist-electron/, 所以 ../../../ 回到项目根目录
+  return join(__dirname, '..', '..', '..', 'bundled-python')
 }
 
 function getPythonPath(): string {
@@ -47,7 +48,7 @@ function getModelsDir(): string {
   if (app.isPackaged) {
     return join(process.resourcesPath, 'models')
   }
-  return join(__dirname, '..', '..', 'models')
+  return join(__dirname, '..', '..', '..', 'models')
 }
 
 function getPythonDir(): string {

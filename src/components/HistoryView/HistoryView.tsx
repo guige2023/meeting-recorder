@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { Search, Calendar, Users, Clock, Star, Trash2, FileAudio, X, ChevronRight, Copy, Filter, Tag, Edit3, Check, AudioLines, Mic, BarChart2, Upload, Loader2 } from 'lucide-react'
-import { useMeetingStore, MeetingDetail, SearchFilters, DateRange, Segment } from '@/stores/meetingStore'
+import { useMeetingStore, MeetingDetail, SearchFilters, DateRange, DurationRange, Segment } from '@/stores/meetingStore'
 import AudioPlayer from './AudioPlayer'
 import BatchExportModal from './BatchExportModal'
 
@@ -23,6 +23,7 @@ export default function HistoryView() {
   const [filterTimeRange, setFilterTimeRange] = useState<DateRange>('all')
   const [filterFavorites, setFilterFavorites] = useState<boolean | null>(null)
   const [filterSpeakerCount, setFilterSpeakerCount] = useState<number | null>(null)
+  const [filterDurationRange, setFilterDurationRange] = useState<DurationRange>('all')
   const [filterMonth, setFilterMonth] = useState<string>('all') // 'YYYY-MM' or 'all'
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<MeetingDetail | null>(null)
@@ -62,10 +63,11 @@ export default function HistoryView() {
     dateRange: filterTimeRange,
     favorites: filterFavorites,
     speakerCount: filterSpeakerCount,
-  }), [searchQuery, filterTimeRange, filterFavorites, filterSpeakerCount])
+    durationRange: filterDurationRange,
+  }), [searchQuery, filterTimeRange, filterFavorites, filterSpeakerCount, filterDurationRange])
 
   useEffect(() => {
-    if (!searchQuery && filterTimeRange === 'all' && filterFavorites === null && filterSpeakerCount === null) {
+    if (!searchQuery && filterTimeRange === 'all' && filterFavorites === null && filterSpeakerCount === null && filterDurationRange === 'all') {
       setDisplayMeetings(monthMeetings)
     }
   }, [meetings, searchQuery, filterTimeRange, filterFavorites, filterSpeakerCount, filterMonth])
@@ -73,7 +75,7 @@ export default function HistoryView() {
   useEffect(() => {
     const timer = setTimeout(async () => {
       const filters = buildFilters()
-      const hasFilters = !!(filters.query || filters.dateRange !== 'all' || filters.favorites !== null || filters.speakerCount !== null)
+      const hasFilters = !!(filters.query || filters.dateRange !== 'all' || filters.favorites !== null || filters.speakerCount !== null || filters.durationRange !== 'all')
       if (hasFilters) {
         setSearchHighlight(searchQuery.trim())
         const results = await searchMeetings(filters)
@@ -92,7 +94,7 @@ export default function HistoryView() {
       }
     }, 300)
     return () => clearTimeout(timer)
-  }, [searchQuery, filterTimeRange, filterFavorites, filterSpeakerCount, filterMonth])
+  }, [searchQuery, filterTimeRange, filterFavorites, filterSpeakerCount, filterDurationRange, filterMonth])
 
   const handleMeetingClick = async (id: string) => {
     if (id === selectedId) { setSelectedId(null); setDetail(null); return }
@@ -307,6 +309,13 @@ export default function HistoryView() {
           <option value="3">3人+</option>
           <option value="4">4人+</option>
         </select>
+        <select value={filterDurationRange} onChange={e => setFilterDurationRange(e.target.value as DurationRange)}
+          className="px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">
+          <option value="all">全部时长</option>
+          <option value="under10">10分钟以下</option>
+          <option value="10to30">10-30分钟</option>
+          <option value="over30">30分钟以上</option>
+        </select>
         <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
           {([[null, '全部'], [true, '已收藏'], [false, '未收藏']] as const).map(([val, label]) => (
             <button key={String(val)} onClick={() => setFilterFavorites(val)}
@@ -316,8 +325,8 @@ export default function HistoryView() {
             </button>
           ))}
         </div>
-        {(searchQuery || filterTimeRange !== 'all' || filterFavorites !== null || filterSpeakerCount !== null || filterMonth !== 'all') && (
-          <button onClick={() => { setSearchQuery(''); setFilterTimeRange('all'); setFilterFavorites(null); setFilterSpeakerCount(null); setFilterMonth('all') }}
+        {(searchQuery || filterTimeRange !== 'all' || filterFavorites !== null || filterSpeakerCount !== null || filterDurationRange !== 'all' || filterMonth !== 'all') && (
+          <button onClick={() => { setSearchQuery(''); setFilterTimeRange('all'); setFilterFavorites(null); setFilterSpeakerCount(null); setFilterDurationRange('all'); setFilterMonth('all') }}
             className="px-3 py-2.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors flex items-center gap-1">
             <X size={14} /> 清除筛选
           </button>
@@ -434,7 +443,7 @@ export default function HistoryView() {
         )}
         {loading ? <div className="text-center py-12 text-gray-400">加载中...</div>
          : displayMeetings.length === 0 ? <div className="text-center py-12 text-gray-400 dark:text-gray-500">
-            {searchQuery || filterFavorites !== null || filterSpeakerCount !== null || filterTimeRange !== 'all' ? '没有找到匹配的会议' : '暂无会议记录'}
+            {searchQuery || filterFavorites !== null || filterSpeakerCount !== null || filterDurationRange !== 'all' || filterTimeRange !== 'all' ? '没有找到匹配的会议' : '暂无会议记录'}
            </div>
          : displayMeetings.map(meeting => (
             <div key={meeting.id}>

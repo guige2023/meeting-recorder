@@ -580,6 +580,15 @@ class TranscriptionService:
             conditions.append('m.speaker_count >= ?')
             params.append(sc)
 
+        # 时长过滤：under10 <<10分钟, 10to30=10-30分钟, over30=30分钟以上
+        dur = filters.get('durationRange', 'all')
+        if dur == 'under10':
+            conditions.append('m.duration < 600')
+        elif dur == '10to30':
+            conditions.append('m.duration >= 600 AND m.duration <= 1800')
+        elif dur == 'over30':
+            conditions.append('m.duration > 1800')
+
         where_clause = ' AND '.join(conditions) if conditions else '1=1'
 
         c.execute(f'''
