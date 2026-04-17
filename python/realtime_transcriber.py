@@ -115,7 +115,10 @@ class RealtimeTranscriber:
         try:
             if audio_chunk.dtype != np.float32:
                 audio_chunk = audio_chunk.astype(np.float32)
-            prob = self.vad.model(audio_chunk, self.SAMPLE_RATE).item()
+            # Silero VAD 模型需要 torch.Tensor，不是 numpy ndarray
+            import torch
+            audio_tensor = torch.from_numpy(audio_chunk)
+            prob = self.vad.model(audio_tensor, self.SAMPLE_RATE).item()
             return prob
         except Exception as e:
             print(f'VAD detect error: {e}', file=sys.stderr)

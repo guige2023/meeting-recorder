@@ -154,12 +154,24 @@ export default function HistoryView() {
     const fileName = filePath.split('/').pop() || filePath
     setImportingFile(fileName)
     try {
-      const result = await window.electronAPI.pythonCall('import_audio_file', { filePath })
-      if (result && result.meetingId) {
+      // 1. 复制文件到 app data 目录
+      const importResult = await window.electronAPI.importAudioFile(filePath)
+      if (!importResult || !importResult.audioPath) {
+        console.error('Import failed: no audioPath returned')
+        return
+      }
+
+      // 2. 调用 process_file 开始转写（后台进行）
+      const processResult = await window.electronAPI.pythonCall('process_file', {
+        filePath: importResult.audioPath,
+        language: 'zh'
+      }) as { meetingId?: string; status?: string }
+
+      if (processResult && processResult.meetingId) {
         // 刷新列表
         await fetchMeetings()
-        // 设置处理进度监听（导入后立即进入 processing 状态）
-        setProcessingProgress(result.meetingId, 0, '正在导入...')
+        // 设置处理进度
+        setProcessingProgress(processResult.meetingId, 0, '正在导入并转写...')
       }
     } catch (err) {
       console.error('Import failed:', err)

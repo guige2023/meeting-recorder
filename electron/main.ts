@@ -9,7 +9,7 @@ import {
   nativeTheme,
   shell
 } from 'electron'
-import { join } from 'path'
+import { join, extname } from 'path'
 import { spawn, ChildProcess } from 'child_process'
 import * as fs from 'fs'
 
@@ -286,6 +286,15 @@ function startPythonServer() {
   const modelCacheDir = join(modelsDir, 'hub')
   const torchHubDir = join(modelsDir, 'torch', 'hub')
 
+  // ffmpeg 路径（用于音频格式转换）
+  const ffmpegName = process.platform === 'win32' ? 'ffmpeg.exe' : 'ffmpeg'
+  let ffmpegPath: string
+  if (app.isPackaged) {
+    ffmpegPath = join(process.resourcesPath, 'resources', 'ffmpeg', ffmpegName)
+  } else {
+    ffmpegPath = join(__dirname, '..', 'resources', 'ffmpeg', ffmpegName)
+  }
+
   pythonProcess = spawn(pythonCmd, [pythonScript, `--data-dir=${app.getPath('userData')}`], {
     cwd: pythonDir,
     stdio: ['pipe', 'pipe', 'pipe'],
@@ -298,6 +307,8 @@ function startPythonServer() {
       'TORCH_HUB_DIR': torchHubDir,
       // 让系统 Python 能找到 bundled-python 的 site-packages
       'PYTHONPATH': join(pythonDir, 'lib', 'python3.9', 'site-packages'),
+      // ffmpeg 路径（用于 pydub 音频转换）
+      'FFMPEG_PATH': ffmpegPath,
     }
   })
 
@@ -428,7 +439,7 @@ ipcMain.handle('import_audio_file', async (_event, srcPath: string) => {
     fs.mkdirSync(recordingsDir, { recursive: true })
   }
 
-  const ext = path.extname(srcPath)
+  const ext = extname(srcPath)
   const timestamp = Date.now()
   const destFileName = `import_${timestamp}${ext}`
   const destPath = join(recordingsDir, destFileName)

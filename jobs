@@ -220,4 +220,51 @@ Python 路径重构：
 
 ---
 
+## 2026-04-17 音频导入转写修复 & FFmpeg 打包
+
+**完成时间**：2026-04-17
+
+**问题**：
+导入的音频转文本失败，原因是 `HistoryView.tsx` 调用了不存在的 `pythonCall('import_audio_file')` 方法，而不是正确的 Electron IPC handler `importAudioFile()`，且导入后从未调用 `process_file` 开始转写。
+
+**改动概要**：
+
+1. **修复导入流程**（`src/components/HistoryView/HistoryView.tsx`）：
+   - `handleImportFile` 现在正确调用 `window.electronAPI.importAudioFile()` 复制文件到 app data 目录
+   - 然后调用 `pythonCall('process_file', ...)` 触发后台转写
+   - 之前错误地调用了不存在的 Python RPC method `import_audio_file`
+
+2. **FFmpeg 打包**：
+   - 下载 macOS arm64 静态 ffmpeg（77MB）到 `resources/ffmpeg/ffmpeg`
+   - `electron/main.ts` 通过 `FFMPEG_PATH` 环境变量将 ffmpeg 路径传给 Python 子进程
+
+3. **音频转换模块升级**（`python/audio_converter.py`）：
+   - 优先使用 soundfile + scipy（无需 ffmpeg）转换常见格式
+   - fallback 使用 pydub + FFmpeg 转换特殊格式（m4a/mp3 等）
+   - 支持 `FFMPEG_PATH` 环境变量指定 ffmpeg 路径
+
+4. **其他修复**：
+   - `electron/main.ts`: `path.extname` → `extname`（修复 TS 编译错误）
+   - 同步更新 `bundled-python/audio_converter.py`
+
+**Commit 历史**：
+- fix(HistoryView): use importAudioFile IPC + process_file for transcription
+- feat(ffmpeg): bundle static ffmpeg binary in resources/ffmpeg/
+- refactor(audio_converter): soundfile-first, pydub fallback with FFMPEG_PATH
+
+**验证结果**：
+- ✅ `npm run build` 全量编译通过
+- ✅ macOS DMG 打包成功：release/MeetingRecorder-1.0.7-arm64.dmg（1.1GB，含模型+Python+ffmpeg）
+- ✅ FFmpeg 77MB 已打包进 resources/ffmpeg/ffmpeg
+
+**文件变更**：
+- 修改：src/components/HistoryView/HistoryView.tsx（修复导入流程）
+- 修改：electron/main.ts（FFMPEG_PATH 环境变量 + 修复 TS）
+- 修改：python/audio_converter.py（soundfile 优先 + FFMPEG_PATH 支持）
+- 新增：resources/ffmpeg/ffmpeg（77MB macOS arm64 静态二进制）
+- 修改：scripts/download-ffmpeg.sh（新增）
+- 修改：README.md（记录 FFmpeg 打包信息）
+
+---
+
 *格式说明：每条记录包含完成时间、改动概要、验证结果*

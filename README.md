@@ -13,6 +13,7 @@
 - **深色模式** — 支持明暗主题切换
 - **系统托盘** — 后台录音，悬浮球控制
 - **全局快捷键** — 录音/停止快捷键
+- **导入音频转写** — 支持 mp3/m4a/wav/flac/ogg 等格式
 
 ## 技术栈
 
@@ -24,6 +25,7 @@
 | ASR 模型 | FunASR 1.3.1 / SenseVoiceSmall |
 | VAD | Silero-VAD（本地）|
 | 说话人分离 | Silero-VAD + MFCC + BIC/AHC 聚类 |
+| 音频转换 | FFmpeg（bundled）+ soundfile/scipy |
 | 构建 | electron-builder（DMG + NSIS）|
 
 ## 下载安装包
@@ -45,6 +47,7 @@
 |------|------|------|
 | SenseVoiceSmall | ~888 MB | 语音识别 |
 | Silero-VAD | ~34 MB | 语音活动检测 |
+| FFmpeg | ~77 MB | 音频格式转换（支持 mp3/m4a/ogg 等） |
 
 ## 开发
 
@@ -81,6 +84,7 @@ npm run build        # 构建 macOS DMG + Windows EXE
 ├── python/            Python 后端（录音、VAD、ASR、说话人分离）
 ├── bundled-python/    打包的 Python 运行时
 ├── models/            AI 模型（SenseVoice + Silero-VAD）
+├── resources/ffmpeg/  FFmpeg 静态二进制
 └── release/           构建产物
 ```
 
@@ -89,7 +93,7 @@ npm run build        # 构建 macOS DMG + Windows EXE
 - **Electron 主进程** 启动 Python 子进程，通过 stdio JSON-RPC 通信
 - **Python 后端**：`rpc_server.py` 是入口，管理 VAD、ASR、说话人分离模块
 - **模型路径**：生产环境从 `app.resourcesPath/models/` 加载，开发环境从项目根目录 `models/` 加载
-- **环境变量**：`CUDA_VISIBLE_DEVICES=''`（强制 CPU）、`MODELSCOPE_CACHE`、`TORCH_HUB_DIR`
+- **环境变量**：`CUDA_VISIBLE_DEVICES=''`（强制 CPU）、`MODELSCOPE_CACHE`、`TORCH_HUB_DIR`、`FFMPEG_PATH`
 
 ## 录音流程
 
@@ -104,5 +108,4 @@ npm run build        # 构建 macOS DMG + Windows EXE
 ```
 
 ## License
-
 MIT
