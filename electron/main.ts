@@ -202,10 +202,18 @@ function registerGlobalShortcuts() {
  * 检查 Python 依赖是否完整，缺失则自动 pip install。
  * 检查通过后调用 startPythonServer()。
  */
+function getBundledPythonCmd(): string {
+  const pythonDir = getBundledPythonDir()
+  if (process.platform === 'win32') {
+    return join(pythonDir, 'python.exe')
+  }
+  return join(pythonDir, 'bin', 'python')
+}
+
 function ensurePythonDeps() {
   const pythonDir = getPythonDir()
   const reqPath = join(pythonDir, 'requirements.txt')
-  const pythonCmd = process.platform === 'win32' ? 'python' : 'python3'
+  const pythonCmd = getBundledPythonCmd()
 
   // 快速检查：尝试 import 核心包
   const checkProc = spawn(pythonCmd, [
