@@ -267,4 +267,61 @@ Python 路径重构：
 
 ---
 
+## 2026-04-18 Phase 7 & 8 补充功能
+
+**完成时间**：2026-04-18
+
+**改动概要**：
+
+### Phase 7 补充：模型管理 + 数据库导入导出
+
+**模型管理**：
+- `python/rpc_server.py`: 新增 `get_model_info` RPC 方法，遍历 `MODELSCOPE_CACHE` 目录检测 SenseVoiceSmall 和 Silero-VAD 模型，返回名称/路径/大小/文件数
+- `python/rpc_server.py`: 新增 `redownload_models` RPC 方法（dev 环境从 ModelScope 重新下载；packaged 环境返回 readonly）
+- `src/components/SettingsView/SettingsView.tsx`: 新增模型信息展示区域（显示各模型名称/大小/文件数）+ "重新下载模型" 按钮
+- `src/types/electron.d.ts`: 新增 `ModelInfo` / `ModelInfoResponse` / `RedownloadModelsResponse` 类型
+
+**数据库导入/导出**：
+- `python/rpc_server.py`: 新增 `export_database` RPC 方法（复制 .db 文件到用户指定路径；可选打包 ZIP 含录音文件）
+- `python/rpc_server.py`: 新增 `import_database` RPC 方法（备份当前数据库后替换为导入的数据库）
+- `electron/main.ts`: 新增 `select_save_path` IPC handler（使用 `dialog.showSaveDialog` 选择导出路径）
+- `electron/preload.ts`: 新增 `selectSavePath` 方法暴露到渲染进程
+- `src/components/SettingsView/SettingsView.tsx`: 新增"导出数据库"/"导入数据库"按钮
+
+### Phase 8 补充：首次启动引导
+
+- 新增 `src/components/OnboardingGuide.tsx`（4 步引导）：欢迎页 → 麦克风权限说明 → 模型状态检测 → 完成
+- `src/App.tsx`: 新增 `showOnboarding` 状态，检查 `localStorage['onboardingCompleted']` 决定是否显示引导
+- `electron/main.ts`: 新增 `open_microphone_permission` IPC handler（macOS 打开 `x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone`；Windows 打开 `ms-settings:privacy-microphone`）
+
+### Bug 修复
+
+- `electron/main.ts`: `ensurePythonDeps()` 使用 `python3` 直接从 PATH 查找，若 PATH 中无 python3 则报 ENOENT。修复为使用与 `startPythonServer()` 相同的 `getBundledPythonCmd()` 获取 bundled-python 路径，确保始终使用打包的 Python
+
+**Commit 历史**：
+- `6ef4a83` feat: add get_model_info and redownload_models RPC methods
+- `98211fc` feat: add model info display and redownload button to SettingsView
+- `b39ef1f` Add export_database and import_database RPC methods
+- `078385a` Add select_save_path IPC handler for database export dialog
+- `d57d817` Add export/import database buttons to SettingsView
+- `c69a832` Add selectSavePath type to electron.d.ts
+- `ec8faec` feat: add first launch onboarding guide (4 steps)
+- `fa9318c` fix: use bundled-python path in ensurePythonDeps (ENOENT fix)
+
+**验证结果**：
+- ✅ `npm run build:vite` 全量编译通过
+- ✅ TS 类型检查通过（pre-existing noDeprecation 警告可忽略）
+
+**文件变更**：
+- 新增：src/components/OnboardingGuide.tsx
+- 修改：python/rpc_server.py（新增 get_model_info/redownload_models/export_database/import_database）
+- 修改：electron/main.ts（新增 select_save_path / open_microphone_permission handlers + 修复 ENOENT）
+- 修改：electron/preload.ts（新增 selectSavePath / openMicrophonePermission）
+- 修改：src/components/SettingsView/SettingsView.tsx（模型信息展示 + 导出/导入数据库按钮）
+- 修改：src/App.tsx（OnboardingGuide 集成）
+- 修改：src/types/electron.d.ts（新增类型）
+- 同步：bundled-python/rpc_server.py（与 python/rpc_server.py 保持同步）
+
+---
+
 *格式说明：每条记录包含完成时间、改动概要、验证结果*
