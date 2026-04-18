@@ -54,6 +54,7 @@ interface ElectronAPI {
   pythonCall: (method: string, params?: Record<string, unknown>) => Promise<any>
   openMicrophonePermission: () => Promise<{ status: string }>
   selectFile: () => Promise<string[]>
+  importAudioFile: (srcPath: string) => Promise<{ meetingId: string; audioPath: string }>
   selectSavePath: (options?: { defaultPath?: string; filters?: { name: string; extensions: string[] }[] }) => Promise<string | null>
   getAppPath: () => Promise<string>
   getAudioUrl: (filePath: string) => Promise<string>
