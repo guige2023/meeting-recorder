@@ -78,6 +78,107 @@ def get_model_cache_size():
         return f"{total / (1024**2):.0f} MB"
     return f"{total / 1024:.0f} KB"
 
+def get_model_info():
+    """获取捆绑模型的信息"""
+    # 获取模型目录路径（从环境变量或默认值）
+    models_dir = os.environ.get('MODELSCOPE_CACHE')
+    if not models_dir or not os.path.exists(models_dir):
+        # 尝试开发环境默认路径
+        dev_path = '/Users/guige/my_project/meeting-recorder/models'
+        if os.path.exists(dev_path):
+            models_dir = dev_path
+        else:
+            return {'models': [], 'totalSize': 0, 'status': 'not_found'}
+
+    models_info = []
+    total_size = 0
+    total_files = 0
+
+    # 定义要检测的模型及其路径模式
+    model_patterns = {
+        'SenseVoiceSmall': ['hub', 'models', 'iic', 'SenseVoiceSmall'],
+        'Silero-VAD': ['torch', 'hub', 'snakers4_silero-vad_master', 'src', 'silero_vad', 'data'],
+    }
+
+    try:
+        for root, dirs, files in os.walk(models_dir):
+            # 计算当前目录的大小
+            dir_size = 0
+            dir_files = 0
+            for f in files:
+                try:
+                    dir_size += os.path.getsize(os.path.join(root, f))
+                    dir_files += 1
+                except:
+                    pass
+
+            if dir_size > 0:
+                # 判断是哪个模型
+                rel_path = os.path.relpath(root, models_dir)
+                path_parts = rel_path.split(os.sep)
+
+                model_name = None
+                for name, pattern in model_patterns.items():
+                    if any(p in path_parts for p in pattern):
+                        model_name = name
+                        break
+
+                if model_name:
+                    models_info.append({
+                        'name': model_name,
+                        'path': root,
+                        'sizeBytes': dir_size,
+                        'fileCount': dir_files,
+                    })
+                    total_size += dir_size
+                    total_files += dir_files
+
+    except Exception as e:
+        return {'models': [], 'totalSize': 0, 'status': 'error', 'error': str(e)}
+
+    return {
+        'models': models_info,
+        'totalSize': total_size,
+        'totalFiles': total_files,
+        'status': 'ok' if models_info else 'empty',
+    }
+
+def redownload_models():
+    """重新下载模型（仅开发环境有效， packaged app 中模型为只读）"""
+    # 检查是否为打包后的应用
+    import sys
+    if hasattr(sys, '_MEIPASS'):
+        # 打包后的应用，模型在 app.asar 中，无法重新下载
+        return {'status': 'readonly', 'message': '打包应用中模型为只读，无法重新下载'}
+
+    # 开发环境：从 ModelScope 重新下载
+    models_dir = os.environ.get('MODELSCOPE_CACHE')
+    if not models_dir:
+        return {'status': 'error', 'message': '未找到 MODELSCOPE_CACHE 环境变量'}
+
+    try:
+        # 删除现有模型目录
+        import shutil
+        if os.path.exists(models_dir):
+            shutil.rmtree(models_dir)
+
+        # 触发模型下载（通过导入 funasr 会自动下载）
+        send_notification('model_download', {'message': '正在从 ModelScope 下载模型...', 'progress': 0})
+
+        # 使用 modelscope 下载模型
+        from modelscope.hub import ModelScope
+        # 触发 SenseVoiceSmall 下载
+        from funasr import AutoModel
+        model = AutoModel(model='iic/SenseVoiceSmall', hub='ms')
+
+        send_notification('model_download', {'message': '模型下载完成', 'progress': 100})
+
+        return {'status': 'ok', 'message': '模型重新下载完成'}
+    except ImportError:
+        return {'status': 'error', 'message': 'modelscope 库不可用，请手动下载模型'}
+    except Exception as e:
+        return {'status': 'error', 'message': f'下载失败: {str(e)}'}
+
 def send_notification(method, params):
     """发送通知到 Electron"""
     print(json.dumps({'jsonrpc': '2.0', 'method': method, 'params': params}), flush=True)
@@ -321,6 +422,10 @@ def handle_request(method, params, rpc_id):
                                 zf.writestr(f'{base}/{base}.wav', f.read())
 
             return {'zipPath': zip_path}
+        elif method == 'get_model_info':
+            return get_model_info()
+        elif method == 'redownload_models':
+            return redownload_models()
         else:
             return {'error': f'Unknown method: {method}'}
     except Exception as e:
