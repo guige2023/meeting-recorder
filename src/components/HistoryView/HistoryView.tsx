@@ -27,6 +27,7 @@ export default function HistoryView() {
   const [filterMonth, setFilterMonth] = useState<string>('all') // 'YYYY-MM' or 'all'
   const [filterCustomStart, setFilterCustomStart] = useState<string>('')
   const [filterCustomEnd, setFilterCustomEnd] = useState<string>('')
+  const [filteredCount, setFilteredCount] = useState<number>(0)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<MeetingDetail | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
@@ -86,7 +87,7 @@ export default function HistoryView() {
   useEffect(() => {
     const timer = setTimeout(async () => {
       const filters = buildFilters()
-      const hasFilters = !!(filters.query || filters.dateRange !== 'all' || filters.favorites !== null || filters.speakerCount !== null || filters.durationRange !== 'all')
+      const hasFilters = !!(filters.query || filters.dateRange !== 'all' || filters.favorites !== null || filters.speakerCount !== null || filters.durationRange !== 'all' || filterMonth !== 'all')
       if (hasFilters) {
         setSearchHighlight(searchQuery.trim())
         const results = await searchMeetings(filters)
@@ -99,8 +100,10 @@ export default function HistoryView() {
             return mKey === filterMonth
           })
         setDisplayMeetings(monthFiltered)
+        setFilteredCount(monthFiltered.length)
       } else {
         setSearchHighlight('')
+        setFilteredCount(0)
         await fetchMeetings()
       }
     }, 300)
@@ -464,7 +467,7 @@ export default function HistoryView() {
         )}
         {loading ? <div className="text-center py-12 text-gray-400">加载中...</div>
          : displayMeetings.length === 0 ? <div className="text-center py-12 text-gray-400 dark:text-gray-500">
-            {searchQuery || filterFavorites !== null || filterSpeakerCount !== null || filterDurationRange !== 'all' || filterTimeRange !== 'all' ? '没有找到匹配的会议' : '暂无会议记录'}
+            {searchQuery || filterFavorites !== null || filterSpeakerCount !== null || filterDurationRange !== 'all' || filterTimeRange !== 'all' || filterMonth !== 'all' || filterCustomStart || filterCustomEnd ? (filteredCount > 0 ? `没有找到匹配的会议（筛选 ${filteredCount} 条）` : '没有找到匹配的会议') : '暂无会议记录'}
            </div>
          : displayMeetings.map(meeting => (
             <div key={meeting.id}>
