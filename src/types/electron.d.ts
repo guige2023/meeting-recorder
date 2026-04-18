@@ -53,6 +53,7 @@ interface ModelDownloadData {
 interface ElectronAPI {
   pythonCall: (method: string, params?: Record<string, unknown>) => Promise<any>
   selectFile: () => Promise<string[]>
+  selectSavePath: (options?: { defaultPath?: string; filters?: { name: string; extensions: string[] }[] }) => Promise<string | null>
   getAppPath: () => Promise<string>
   getAudioUrl: (filePath: string) => Promise<string>
   getDarkMode: () => Promise<boolean>
