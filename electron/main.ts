@@ -432,6 +432,18 @@ ipcMain.handle('select_file', async () => {
   return result.filePaths
 })
 
+// 保存文件对话框（用于数据库导出）
+ipcMain.handle('select_save_path', async (_event, options: { defaultPath?: string; filters?: { name: string; extensions: string[] }[] }) => {
+  const result = await dialog.showSaveDialog(mainWindow!, {
+    defaultPath: options.defaultPath,
+    filters: options.filters || [
+      { name: 'Database', extensions: ['db'] },
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  })
+  return result.filePath || null
+})
+
 // 导入录音文件：复制到 app data 目录，然后触发 Python 处理
 ipcMain.handle('import_audio_file', async (_event, srcPath: string) => {
   const dataDir = app.getPath('userData')

@@ -10,6 +10,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 文件选择
   selectFile: () => ipcRenderer.invoke('select_file'),
 
+  // 保存文件对话框（用于数据库导出）
+  selectSavePath: (options?: { defaultPath?: string; filters?: { name: string; extensions: string[] }[] }) =>
+    ipcRenderer.invoke('select_save_path', options || {}),
+
   // 导入录音文件（复制到 app data 目录）
   importAudioFile: (srcPath: string) => ipcRenderer.invoke('import_audio_file', srcPath),
 
@@ -78,6 +82,7 @@ declare global {
       pythonCall: (method: string, params?: any) => Promise<any>
       importAudioFile: (srcPath: string) => Promise<{ meetingId: string; audioPath: string }>
       selectFile: () => Promise<string[]>
+      selectSavePath: (options?: { defaultPath?: string; filters?: { name: string; extensions: string[] }[] }) => Promise<string | null>
       getAppPath: () => Promise<string>
       getAudioUrl: (filePath: string) => Promise<string>
       getDarkMode: () => Promise<boolean>
