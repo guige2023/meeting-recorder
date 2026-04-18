@@ -27,6 +27,7 @@ export default function HistoryView() {
   const [filterMonth, setFilterMonth] = useState<string>('all') // 'YYYY-MM' or 'all'
   const [filterCustomStart, setFilterCustomStart] = useState<string>('')
   const [filterCustomEnd, setFilterCustomEnd] = useState<string>('')
+  const [filterTag, setFilterTag] = useState<string>('all') // tag name or 'all'
   const [filteredCount, setFilteredCount] = useState<number>(0)
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<MeetingDetail | null>(null)
@@ -50,7 +51,11 @@ export default function HistoryView() {
       const d = new Date(m.createdAt)
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
     })
-  )].sort().reverse()
+  )].sort().reverse() as string[]
+
+  // 计算可用标签列表（从所有 meetings 提取）
+  const allTags = meetings.flatMap(m => m.tags || [])
+  const availableTags = [...new Set(allTags)]
 
   // 按月份预过滤（月份筛选独立于全文搜索，月份内再做关键词过滤）
   const monthMeetings = filterMonth === 'all'
@@ -87,20 +92,23 @@ export default function HistoryView() {
   useEffect(() => {
     const timer = setTimeout(async () => {
       const filters = buildFilters()
-      const hasFilters = !!(filters.query || filters.dateRange !== 'all' || filters.favorites !== null || filters.speakerCount !== null || filters.durationRange !== 'all' || filterMonth !== 'all')
+      const hasFilters = !!(filters.query || filters.dateRange !== 'all' || filters.favorites !== null || filters.speakerCount !== null || filters.durationRange !== 'all' || filterMonth !== 'all' || filterTag !== 'all')
       if (hasFilters) {
         setSearchHighlight(searchQuery.trim())
         const results = await searchMeetings(filters)
-        // 进一步按月份过滤（月份筛选独立于后端全文搜索）
-        const monthFiltered = filterMonth === 'all'
+        // 进一步按月份和标签过滤（这两个是前端独立筛选）
+        let filtered = filterMonth === 'all'
           ? results
           : results.filter((m) => {
             const d = new Date(m.createdAt)
             const mKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
             return mKey === filterMonth
           })
-        setDisplayMeetings(monthFiltered)
-        setFilteredCount(monthFiltered.length)
+        if (filterTag !== 'all') {
+          filtered = filtered.filter(m => m.tags?.includes(filterTag))
+        }
+        setDisplayMeetings(filtered)
+        setFilteredCount(filtered.length)
       } else {
         setSearchHighlight('')
         setFilteredCount(0)
@@ -108,7 +116,7 @@ export default function HistoryView() {
       }
     }, 300)
     return () => clearTimeout(timer)
-  }, [searchQuery, filterTimeRange, filterFavorites, filterSpeakerCount, filterDurationRange, filterCustomStart, filterCustomEnd, filterMonth])
+  }, [searchQuery, filterTimeRange, filterFavorites, filterSpeakerCount, filterDurationRange, filterCustomStart, filterCustomEnd, filterMonth, filterTag])
 
   const handleMeetingClick = async (id: string) => {
     if (id === selectedId) { setSelectedId(null); setDetail(null); return }
@@ -340,6 +348,15 @@ export default function HistoryView() {
           <option value="10to30">10-30分钟</option>
           <option value="over30">30分钟以上</option>
         </select>
+        {availableTags.length > 0 && (
+          <select value={filterTag} onChange={e => setFilterTag(e.target.value)}
+            className="px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">
+            <option value="all">全部标签</option>
+            {availableTags.map(tag => (
+              <option key={tag} value={tag}>{tag}</option>
+            ))}
+          </select>
+        )}
         <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
           {([[null, '全部'], [true, '已收藏'], [false, '未收藏']] as const).map(([val, label]) => (
             <button key={String(val)} onClick={() => setFilterFavorites(val)}
@@ -349,8 +366,8 @@ export default function HistoryView() {
             </button>
           ))}
         </div>
-        {(searchQuery || filterTimeRange !== 'all' || filterFavorites !== null || filterSpeakerCount !== null || filterDurationRange !== 'all' || filterMonth !== 'all') && (
-          <button onClick={() => { setSearchQuery(''); setFilterTimeRange('all'); setFilterFavorites(null); setFilterSpeakerCount(null); setFilterDurationRange('all'); setFilterCustomStart(''); setFilterCustomEnd(''); setFilterMonth('all') }}
+        {(searchQuery || filterTimeRange !== 'all' || filterFavorites !== null || filterSpeakerCount !== null || filterDurationRange !== 'all' || filterMonth !== 'all' || filterTag !== 'all' || filterCustomStart || filterCustomEnd) && (
+          <button onClick={() => { setSearchQuery(''); setFilterTimeRange('all'); setFilterFavorites(null); setFilterSpeakerCount(null); setFilterDurationRange('all'); setFilterCustomStart(''); setFilterCustomEnd(''); setFilterMonth('all'); setFilterTag('all') }}
             className="px-3 py-2.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors flex items-center gap-1">
             <X size={14} /> 清除筛选
           </button>
@@ -467,7 +484,7 @@ export default function HistoryView() {
         )}
         {loading ? <div className="text-center py-12 text-gray-400">加载中...</div>
          : displayMeetings.length === 0 ? <div className="text-center py-12 text-gray-400 dark:text-gray-500">
-            {searchQuery || filterFavorites !== null || filterSpeakerCount !== null || filterDurationRange !== 'all' || filterTimeRange !== 'all' || filterMonth !== 'all' || filterCustomStart || filterCustomEnd ? (filteredCount > 0 ? `没有找到匹配的会议（筛选 ${filteredCount} 条）` : '没有找到匹配的会议') : '暂无会议记录'}
+            {searchQuery || filterFavorites !== null || filterSpeakerCount !== null || filterDurationRange !== 'all' || filterTimeRange !== 'all' || filterMonth !== 'all' || filterTag !== 'all' || filterCustomStart || filterCustomEnd ? (filteredCount > 0 ? `没有找到匹配的会议（筛选 ${filteredCount} 条）` : '没有找到匹配的会议') : '暂无会议记录'}
            </div>
          : displayMeetings.map(meeting => (
             <div key={meeting.id}>
