@@ -426,6 +426,69 @@ def handle_request(method, params, rpc_id):
             return get_model_info()
         elif method == 'redownload_models':
             return redownload_models()
+        elif method == 'export_database':
+            # 导出数据库到指定路径
+            export_path = params.get('path')
+            include_audio = params.get('include_audio', False)
+            if not export_path:
+                return {'error': '导出路径不能为空'}
+
+            db_path = os.path.join(_DATA_DIR, 'meetings.db') if _DATA_DIR else None
+            if not db_path or not os.path.exists(db_path):
+                return {'error': '数据库文件不存在'}
+
+            try:
+                if include_audio:
+                    # 导出数据库 + 录音文件（ZIP格式）
+                    recordings_dir = os.path.join(_DATA_DIR, 'recordings') if _DATA_DIR else None
+                    tmp = tempfile.gettempdir()
+                    ts = dt.datetime.now().strftime('%Y%m%d_%H%M%S')
+                    zip_path = os.path.join(tmp, f'meeting_backup_{ts}.zip')
+
+                    with zipfile.ZipFile(zip_path, 'w', zipfile.ZIP_DEFLATED) as zf:
+                        # 添加数据库文件
+                        zf.write(db_path, 'meetings.db')
+                        # 添加录音文件
+                        if recordings_dir and os.path.exists(recordings_dir):
+                            for root, dirs, files in os.walk(recordings_dir):
+                                for file in files:
+                                    file_path = os.path.join(root, file)
+                                    arcname = os.path.join('recordings', os.path.relpath(file_path, recordings_dir))
+                                    zf.write(file_path, arcname)
+
+                    return {'status': 'ok', 'zipPath': zip_path, 'message': '数据库和录音文件已导出'}
+                else:
+                    # 仅导出数据库文件
+                    import shutil
+                    shutil.copy2(db_path, export_path)
+                    return {'status': 'ok', 'path': export_path, 'message': '数据库已导出'}
+            except Exception as e:
+                return {'error': f'导出失败: {str(e)}'}
+        elif method == 'import_database':
+            # 导入数据库备份
+            import_path = params.get('path')
+            if not import_path:
+                return {'error': '导入路径不能为空'}
+            if not os.path.exists(import_path):
+                return {'error': '导入文件不存在'}
+
+            db_path = os.path.join(_DATA_DIR, 'meetings.db') if _DATA_DIR else None
+            if not db_path:
+                return {'error': '数据目录未设置'}
+
+            try:
+                # 创建备份
+                bak_path = db_path + '.bak'
+                if os.path.exists(db_path):
+                    import shutil
+                    shutil.copy2(db_path, bak_path)
+
+                # 复制新数据库
+                import shutil
+                shutil.copy2(import_path, db_path)
+                return {'status': 'ok', 'message': '数据库已导入（已备份原数据库）'}
+            except Exception as e:
+                return {'error': f'导入失败: {str(e)}'}
         else:
             return {'error': f'Unknown method: {method}'}
     except Exception as e:
