@@ -137,7 +137,7 @@ export default function SettingsView() {
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input type="checkbox" checked={settings.darkMode}
-                  onChange={e => setSettings({ ...settings, darkMode: e.target.checked })}
+                  onChange={e => setSettings(s => ({ ...s, darkMode: e.target.checked }))}
                   className="sr-only peer" />
                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-500 dark:peer-checked:bg-primary-500"></div>
               </label>
@@ -154,7 +154,7 @@ export default function SettingsView() {
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">麦克风设备</label>
               <select value={settings.microphone}
-                onChange={e => setSettings({ ...settings, microphone: e.target.value })}
+                onChange={e => setSettings(s => ({ ...s, microphone: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
                 {mics.map(mic => <option key={mic.id} value={mic.id}>{mic.label}</option>)}
               </select>
@@ -162,7 +162,7 @@ export default function SettingsView() {
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">录音质量</label>
               <select value={settings.audioQuality}
-                onChange={e => setSettings({ ...settings, audioQuality: e.target.value })}
+                onChange={e => setSettings(s => ({ ...s, audioQuality: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
                 <option value="16kHz">16kHz（推荐，转写用）</option>
                 <option value="44.1kHz">44.1kHz（高音质）</option>
@@ -180,7 +180,7 @@ export default function SettingsView() {
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">会议语言</label>
               <select value={settings.language}
-                onChange={e => setSettings({ ...settings, language: e.target.value })}
+                onChange={e => setSettings(s => ({ ...s, language: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
                 <option value="zh">中文</option>
                 <option value="yue">粤语</option>
@@ -205,7 +205,7 @@ export default function SettingsView() {
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input type="checkbox" checked={settings.realtimeCaption}
-                  onChange={e => setSettings({ ...settings, realtimeCaption: e.target.checked })}
+                  onChange={e => setSettings(s => ({ ...s, realtimeCaption: e.target.checked }))}
                   className="sr-only peer" />
                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-500"></div>
               </label>
@@ -214,7 +214,7 @@ export default function SettingsView() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">字幕刷新间隔</label>
                 <select value={settings.captionInterval}
-                  onChange={e => setSettings({ ...settings, captionInterval: Number(e.target.value) })}
+                  onChange={e => setSettings(s => ({ ...s, captionInterval: Number(e.target.value) }))}
                   className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
                   <option value={1}>1 秒（更实时）</option>
                   <option value={2}>2 秒（推荐）</option>
@@ -235,7 +235,7 @@ export default function SettingsView() {
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-200 mb-1">默认导出格式</label>
               <select value={settings.exportFormat}
-                onChange={e => setSettings({ ...settings, exportFormat: e.target.value })}
+                onChange={e => setSettings(s => ({ ...s, exportFormat: e.target.value }))}
                 className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100">
                 <option value="md">Markdown (.md)</option>
                 <option value="txt">纯文本 (.txt)</option>
@@ -258,7 +258,7 @@ export default function SettingsView() {
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input type="checkbox" checked={settings.autoStart}
-                  onChange={e => setSettings({ ...settings, autoStart: e.target.checked })}
+                  onChange={e => setSettings(s => ({ ...s, autoStart: e.target.checked }))}
                   className="sr-only peer" />
                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-500"></div>
               </label>
@@ -270,7 +270,7 @@ export default function SettingsView() {
               </div>
               <label className="relative inline-flex items-center cursor-pointer">
                 <input type="checkbox" checked={settings.minimizeToTray}
-                  onChange={e => setSettings({ ...settings, minimizeToTray: e.target.checked })}
+                  onChange={e => setSettings(s => ({ ...s, minimizeToTray: e.target.checked }))}
                   className="sr-only peer" />
                 <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-primary-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-500"></div>
               </label>
