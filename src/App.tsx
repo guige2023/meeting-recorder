@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import RecorderView from './components/RecorderView/RecorderView'
 import HistoryView from './components/HistoryView/HistoryView'
 import SettingsView from './components/SettingsView/SettingsView'
-import OnboardingView from './components/OnboardingView/OnboardingView'
+import OnboardingGuide from './components/OnboardingGuide'
 import { Mic, FileText, Settings } from 'lucide-react'
 
 // DEBUG: 检查 electronAPI 是否注入
@@ -14,7 +14,7 @@ type Tab = 'recorder' | 'history' | 'settings'
 function App() {
   const [activeTab, setActiveTab] = useState<Tab>('recorder')
   const [darkMode, setDarkMode] = useState(false)
-  const [showOnboarding, setShowOnboarding] = useState(false)
+  const [showOnboarding, setShowOnboarding] = useState(!localStorage.getItem('onboardingCompleted'))
   const [envError, setEnvError] = useState<string | null>(null)
   const [modelDownload, setModelDownload] = useState<string | null>(null)
   const [installMessage, setInstallMessage] = useState<string | null>(null)
@@ -52,11 +52,6 @@ function App() {
     // Python ready
     window.electronAPI.onPythonReady(() => {
       setPythonReady(true)
-      // 首次运行检查
-      const hasOnboarded = localStorage.getItem('meetingRecorder_onboarded')
-      if (!hasOnboarded) {
-        setShowOnboarding(true)
-      }
     })
 
     // 环境通知（pip install 进度 / 安装结果）
@@ -100,8 +95,8 @@ function App() {
   ]
 
   if (showOnboarding) {
-    return <OnboardingView onComplete={() => {
-      localStorage.setItem('meetingRecorder_onboarded', '1')
+    return <OnboardingGuide onComplete={() => {
+      localStorage.setItem('onboardingCompleted', 'true')
       setShowOnboarding(false)
     }} />
   }

@@ -507,6 +507,16 @@ ipcMain.handle('get_settings', () => {
   return getStoredSettings()
 })
 
+ipcMain.handle('open_microphone_permission', async () => {
+  const { shell } = require('electron')
+  if (process.platform === 'darwin') {
+    shell.openExternal('x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone')
+  } else if (process.platform === 'win32') {
+    shell.openExternal('ms-settings:privacy-microphone')
+  }
+  return { status: 'ok' }
+})
+
 ipcMain.handle('show_item_in_folder', (_event, path: string) => {
   shell.showItemInFolder(path)
 })

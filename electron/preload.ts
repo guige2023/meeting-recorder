@@ -30,6 +30,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('theme_changed', (_event, isDark) => callback(isDark))
   },
 
+  // 打开系统麦克风权限设置
+  openMicrophonePermission: () => ipcRenderer.invoke('open_microphone_permission'),
+
   // 设置
   saveSettings: (settings: Record<string, any>) => ipcRenderer.invoke('save_settings', settings),
   getSettings: () => ipcRenderer.invoke('get_settings'),
