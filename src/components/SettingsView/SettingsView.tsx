@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Mic, Globe, Eye, Download, Monitor, Server, Trash2, FolderOpen, Moon, Sun, HardDrive } from 'lucide-react'
+import { Mic, Globe, Eye, Download, Monitor, Server, Trash2, FolderOpen, Moon, Sun, HardDrive, Database, Upload } from 'lucide-react'
 import { useMeetingStore } from '@/stores/meetingStore'
 
 export default function SettingsView() {
@@ -24,6 +24,7 @@ export default function SettingsView() {
   const [cleanupInfo, setCleanupInfo] = useState<{ count: number; fileCount: number; totalBytes: number } | null>(null)
   const [showCleanupPreview, setShowCleanupPreview] = useState(false)
   const [modelInfo, setModelInfo] = useState<{ models: Array<{name: string; path: string; sizeBytes: number; fileCount: number}>; totalSize: number; totalFiles: number; status: string } | null>(null)
+  const [dbOperation, setDbOperation] = useState<'idle' | 'exporting' | 'importing'>('idle')
   const { clearCache, clearData } = useMeetingStore()
 
   useEffect(() => {
@@ -151,6 +152,66 @@ export default function SettingsView() {
       alert('清理失败')
     } finally {
       setCleaningUp(false)
+    }
+  }
+
+  const handleExportDatabase = async () => {
+    try {
+      const includeAudio = confirm('是否同时导出录音文件？（导出会生成 ZIP 包）')
+      const savePath = await window.electronAPI.selectSavePath({
+        defaultPath: 'meetings_backup.db',
+        filters: includeAudio
+          ? [{ name: 'ZIP Archive', extensions: ['zip'] }]
+          : [{ name: 'Database', extensions: ['db'] }, { name: 'All Files', extensions: ['*'] }]
+      })
+      if (!savePath) return
+
+      setDbOperation('exporting')
+      const result = await window.electronAPI.pythonCall('export_database', {
+        path: savePath,
+        include_audio: includeAudio
+      })
+
+      if (result.error) {
+        alert(`导出失败: ${result.error}`)
+      } else {
+        if (includeAudio && result.zipPath) {
+          alert(`数据库和录音文件已导出到: ${result.zipPath}`)
+        } else {
+          alert(`数据库已导出到: ${result.path}`)
+        }
+      }
+    } catch (e) {
+      console.error(e)
+      alert('导出失败')
+    } finally {
+      setDbOperation('idle')
+    }
+  }
+
+  const handleImportDatabase = async () => {
+    if (!confirm('导入数据库将覆盖现有数据。是否继续？')) return
+
+    try {
+      const files = await window.electronAPI.selectFile()
+      if (!files || files.length === 0) return
+
+      const filePath = files[0]
+      setDbOperation('importing')
+      const result = await window.electronAPI.pythonCall('import_database', {
+        path: filePath
+      })
+
+      if (result.error) {
+        alert(`导入失败: ${result.error}`)
+      } else {
+        alert('数据库已成功导入')
+      }
+    } catch (e) {
+      console.error(e)
+      alert('导入失败')
+    } finally {
+      setDbOperation('idle')
     }
   }
 
@@ -391,6 +452,28 @@ export default function SettingsView() {
                 </div>
               </div>
               {cleaningUp && <span className="text-xs text-orange-500">清理中...</span>}
+            </button>
+            <button onClick={handleExportDatabase} disabled={dbOperation !== 'idle'}
+              className="w-full flex items-center justify-between px-4 py-3 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-lg transition-colors disabled:opacity-50">
+              <div className="flex items-center gap-3">
+                <Database size={20} className="text-green-400" />
+                <div className="text-left">
+                  <div className="text-sm font-medium text-green-600 dark:text-green-400">导出数据库</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">备份数据库和可选的录音文件</div>
+                </div>
+              </div>
+              {dbOperation === 'exporting' && <span className="text-xs text-green-500">导出中...</span>}
+            </button>
+            <button onClick={handleImportDatabase} disabled={dbOperation !== 'idle'}
+              className="w-full flex items-center justify-between px-4 py-3 hover:bg-purple-50 dark:hover:bg-purple-900/20 rounded-lg transition-colors disabled:opacity-50">
+              <div className="flex items-center gap-3">
+                <Upload size={20} className="text-purple-400" />
+                <div className="text-left">
+                  <div className="text-sm font-medium text-purple-600 dark:text-purple-400">导入数据库</div>
+                  <div className="text-xs text-gray-500 dark:text-gray-400">从备份文件恢复数据库</div>
+                </div>
+              </div>
+              {dbOperation === 'importing' && <span className="text-xs text-purple-500">导入中...</span>}
             </button>
           </div>
         </section>
