@@ -78,10 +78,10 @@
 - [x] 数据管理（清除历史记录、导出/导入数据库）
 - [x] 音频质量设置（16kHz / 44.1kHz）
 
-## Phase 8：打包 & 发布 ✅ 主要完成
+## Phase 8：打包 & 发布 ✅ 全部完成
 
 - [x] macOS .dmg 安装包制作（包含完整 Python 环境，用户无需安装任何依赖）
-- [ ] Windows NSIS installer (.exe) 制作（需在 Windows 上构建，或安装 wine 交叉编译）
+- [x] Windows NSIS installer (.exe) 制作（wine 交叉编译，1.1GB）
 - [x] 首次启动引导（麦克风权限申请说明）
 - [x] 自动下载缺失模型（首次运行时由 funasr 自动下载）
 - [x] 应用图标和命名（MeetingRecorder）
@@ -89,4 +89,4 @@
 
 ---
 
-*最后更新：2026-04-18*
+*最后更新：2026-04-18 13:35*

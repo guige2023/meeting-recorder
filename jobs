@@ -324,4 +324,32 @@ Python 路径重构：
 
 ---
 
+## 2026-04-18 Phase 8：Windows EXE 交叉编译成功
+
+**完成时间**：2026-04-18 13:35
+
+**改动概要**：
+
+环境搭建（解决了 GStreamer 下载限速问题）：
+- 发现 Homebrew gstreamer-runtime cask SHA256 不匹配问题（GStreamer 服务器对同一 URL 返回不同内容）
+- 使用 curl 直接下载 `/tmp/gstreamer.pkg`，验证 SHA256 `964ff693...` 通过
+- `sudo installer -pkg /tmp/gstreamer.pkg -target /` 成功安装到 `/Library/Frameworks/GStreamer.framework`
+- 从 Homebrew 缓存解压 wine-stable tarball 到 `/Applications/Wine Stable.app`
+- `softwareupdate --install-rosetta --agree-to-license` 安装 Rosetta 2
+
+构建命令：
+```bash
+export PATH="/Applications/Wine Stable.app/Contents/Resources/wine/bin:$PATH"
+cd /Users/guige/my_project/meeting-recorder
+npx electron-builder --win
+```
+
+**产出**：
+- `release/MeetingRecorder Setup 1.0.7.exe` (1.1GB, NSIS Windows 安装包)
+- `release/MeetingRecorder-1.0.7-arm64.dmg` (1.1GB, macOS DMG)
+
+**Commit**：无新 commit（仅构建，无代码变更）
+
+---
+
 *格式说明：每条记录包含完成时间、改动概要、验证结果*
