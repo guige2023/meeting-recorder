@@ -23,6 +23,7 @@ export default function SettingsView() {
   const [cleaningUp, setCleaningUp] = useState(false)
   const [cleanupInfo, setCleanupInfo] = useState<{ count: number; fileCount: number; totalBytes: number } | null>(null)
   const [showCleanupPreview, setShowCleanupPreview] = useState(false)
+  const [modelInfo, setModelInfo] = useState<{ models: Array<{name: string; path: string; sizeBytes: number; fileCount: number}>; totalSize: number; totalFiles: number; status: string } | null>(null)
   const { clearCache, clearData } = useMeetingStore()
 
   useEffect(() => {
@@ -58,6 +59,19 @@ export default function SettingsView() {
         return { ...s, darkMode: isDark }
       })
     })
+  }, [])
+
+  // 获取模型信息
+  useEffect(() => {
+    const fetchModelInfo = async () => {
+      try {
+        const info = await window.electronAPI.pythonCall('get_model_info', {})
+        setModelInfo(info)
+      } catch (e) {
+        console.error('获取模型信息失败:', e)
+      }
+    }
+    fetchModelInfo()
   }, [])
 
   const handleSave = async () => {
@@ -100,6 +114,26 @@ export default function SettingsView() {
     } catch (e) {
       console.error(e)
       alert('获取清理信息失败')
+    }
+  }
+
+  const handleRedownloadModels = async () => {
+    if (!confirm('确定要重新下载模型吗？这将删除现有模型并重新从 ModelScope 下载。')) return
+    try {
+      const result = await window.electronAPI.pythonCall('redownload_models', {})
+      if (result.status === 'ok') {
+        alert('模型重新下载完成')
+      } else if (result.status === 'readonly') {
+        alert('打包应用中模型为只读，无法重新下载')
+      } else {
+        alert(`重新下载失败: ${result.message}`)
+      }
+      // 刷新模型信息
+      const info = await window.electronAPI.pythonCall('get_model_info', {})
+      setModelInfo(info)
+    } catch (e) {
+      console.error(e)
+      alert('重新下载模型失败')
     }
   }
 
@@ -293,6 +327,40 @@ export default function SettingsView() {
                 </div>
               </div>
             )}
+            {modelInfo && modelInfo.models.length > 0 && (
+              <div className="flex items-center gap-3 px-4 py-3 bg-gray-50 dark:bg-gray-900 rounded-lg">
+                <HardDrive size={18} className="text-gray-400 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <div className="text-xs text-gray-500 dark:text-gray-400">模型存储</div>
+                  <div className="space-y-1 mt-1">
+                    {modelInfo.models.map((model, idx) => (
+                      <div key={idx} className="flex justify-between text-xs">
+                        <span className="text-gray-600 dark:text-gray-300">{model.name}</span>
+                        <span className="text-gray-500 dark:text-gray-400">
+                          {(model.sizeBytes / 1024 / 1024).toFixed(1)} MB ({model.fileCount} 个文件)
+                        </span>
+                      </div>
+                    ))}
+                    <div className="flex justify-between text-xs pt-1 border-t border-gray-200 dark:border-gray-700">
+                      <span className="text-gray-600 dark:text-gray-300 font-medium">总计</span>
+                      <span className="text-gray-500 dark:text-gray-400 font-medium">
+                        {(modelInfo.totalSize / 1024 / 1024).toFixed(1)} MB ({modelInfo.totalFiles} 个文件)
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+            <button onClick={handleRedownloadModels}
+              className="w-full flex items-center justify-between px-4 py-3 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg transition-colors">
+              <div className="flex items-center gap-3">
+                <Download size={20} className="text-blue-400" />
+                <div className="text-left">
+                  <div className="text-sm font-medium text-blue-600 dark:text-blue-400">重新下载模型</div>
+                  <div className="text-xs text-gray-500">从 ModelScope 重新下载模型文件</div>
+                </div>
+              </div>
+            </button>
             <button onClick={handleClearCache}
               className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 dark:hover:bg-gray-700 rounded-lg transition-colors">
               <div className="flex items-center gap-3">

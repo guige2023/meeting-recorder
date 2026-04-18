@@ -1,5 +1,25 @@
 // Type declarations for Electron preload API
 
+interface ModelInfo {
+  name: string
+  path: string
+  sizeBytes: number
+  fileCount: number
+}
+
+interface ModelInfoResponse {
+  models: ModelInfo[]
+  totalSize: number
+  totalFiles: number
+  status: 'ok' | 'not_found' | 'empty' | 'error'
+  error?: string
+}
+
+interface RedownloadModelsResponse {
+  status: 'ok' | 'readonly' | 'error'
+  message: string
+}
+
 interface ProcessingProgressData {
   meetingId: string
   progress: number
