@@ -25,6 +25,8 @@ export default function HistoryView() {
   const [filterSpeakerCount, setFilterSpeakerCount] = useState<number | null>(null)
   const [filterDurationRange, setFilterDurationRange] = useState<DurationRange>('all')
   const [filterMonth, setFilterMonth] = useState<string>('all') // 'YYYY-MM' or 'all'
+  const [filterCustomStart, setFilterCustomStart] = useState<string>('')
+  const [filterCustomEnd, setFilterCustomEnd] = useState<string>('')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [detail, setDetail] = useState<MeetingDetail | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
@@ -58,13 +60,22 @@ export default function HistoryView() {
       return mKey === filterMonth
     })
 
-  const buildFilters = useCallback((): SearchFilters => ({
-    query: searchQuery.trim() || undefined,
-    dateRange: filterTimeRange,
-    favorites: filterFavorites,
-    speakerCount: filterSpeakerCount,
-    durationRange: filterDurationRange,
-  }), [searchQuery, filterTimeRange, filterFavorites, filterSpeakerCount, filterDurationRange])
+  const buildFilters = useCallback((): SearchFilters => {
+    const filters: SearchFilters = {
+      query: searchQuery.trim() || undefined,
+      dateRange: filterTimeRange,
+      favorites: filterFavorites,
+      speakerCount: filterSpeakerCount,
+      durationRange: filterDurationRange,
+    }
+    if (filterTimeRange === 'custom' && filterCustomStart) {
+      filters.customStart = new Date(filterCustomStart).setHours(0, 0, 0, 0)
+    }
+    if (filterTimeRange === 'custom' && filterCustomEnd) {
+      filters.customEnd = new Date(filterCustomEnd).setHours(23, 59, 59, 999)
+    }
+    return filters
+  }, [searchQuery, filterTimeRange, filterFavorites, filterSpeakerCount, filterDurationRange, filterCustomStart, filterCustomEnd])
 
   useEffect(() => {
     if (!searchQuery && filterTimeRange === 'all' && filterFavorites === null && filterSpeakerCount === null && filterDurationRange === 'all') {
@@ -94,7 +105,7 @@ export default function HistoryView() {
       }
     }, 300)
     return () => clearTimeout(timer)
-  }, [searchQuery, filterTimeRange, filterFavorites, filterSpeakerCount, filterDurationRange, filterMonth])
+  }, [searchQuery, filterTimeRange, filterFavorites, filterSpeakerCount, filterDurationRange, filterCustomStart, filterCustomEnd, filterMonth])
 
   const handleMeetingClick = async (id: string) => {
     if (id === selectedId) { setSelectedId(null); setDetail(null); return }
@@ -300,7 +311,17 @@ export default function HistoryView() {
           <option value="today">今天</option>
           <option value="week">本周</option>
           <option value="month">本月</option>
+          <option value="custom">自定义</option>
         </select>
+        {filterTimeRange === 'custom' && (
+          <div className="flex items-center gap-1">
+            <input type="date" value={filterCustomStart} onChange={e => setFilterCustomStart(e.target.value)}
+              className="px-2 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" />
+            <span className="text-gray-400">—</span>
+            <input type="date" value={filterCustomEnd} onChange={e => setFilterCustomEnd(e.target.value)}
+              className="px-2 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100" />
+          </div>
+        )}
         <select value={filterSpeakerCount ?? ''} onChange={e => setFilterSpeakerCount(e.target.value ? Number(e.target.value) : null)}
           className="px-4 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100">
           <option value="">所有人数</option>
@@ -326,7 +347,7 @@ export default function HistoryView() {
           ))}
         </div>
         {(searchQuery || filterTimeRange !== 'all' || filterFavorites !== null || filterSpeakerCount !== null || filterDurationRange !== 'all' || filterMonth !== 'all') && (
-          <button onClick={() => { setSearchQuery(''); setFilterTimeRange('all'); setFilterFavorites(null); setFilterSpeakerCount(null); setFilterDurationRange('all'); setFilterMonth('all') }}
+          <button onClick={() => { setSearchQuery(''); setFilterTimeRange('all'); setFilterFavorites(null); setFilterSpeakerCount(null); setFilterDurationRange('all'); setFilterCustomStart(''); setFilterCustomEnd(''); setFilterMonth('all') }}
             className="px-3 py-2.5 text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors flex items-center gap-1">
             <X size={14} /> 清除筛选
           </button>
@@ -804,7 +825,8 @@ function exportAsJson(detail: MeetingDetail) {
     meeting: {
       id: detail.meeting.id,
       title: detail.meeting.title,
-      createdAt: new Date(detail.meeting.createdAt).toISOString(),
+      // SQLite stores seconds, JS Date expects milliseconds
+      createdAt: new Date(detail.meeting.createdAt * 1000).toISOString(),
       duration: detail.meeting.duration,
       audioPath: detail.meeting.audioPath,
       status: detail.meeting.status,

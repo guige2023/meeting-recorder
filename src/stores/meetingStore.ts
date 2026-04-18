@@ -151,7 +151,11 @@ export const useMeetingStore = create<MeetingState>((set, get) => ({
 
   searchMeetings: async (filters) => {
     try {
-      return await window.electronAPI.pythonCall('search_meetings', filters as Record<string, unknown>)
+      // customStart/End 前端是毫秒，SQLite 是秒，需要 /1000
+      const payload = { ...filters }
+      if (payload.customStart != null) payload.customStart = Math.floor(Number(payload.customStart) / 1000)
+      if (payload.customEnd != null) payload.customEnd = Math.floor(Number(payload.customEnd) / 1000)
+      return await window.electronAPI.pythonCall('search_meetings', payload as Record<string, unknown>)
     } catch (err) {
       console.error('Failed to search meetings:', err)
       return []
