@@ -44,7 +44,7 @@ export default function SettingsView() {
     window.electronAPI.getAppPath().then(p => setAppPath(p))
 
     // 监听系统主题变化
-    window.electronAPI.onThemeChanged((isDark: boolean) => {
+    const offThemeChanged = window.electronAPI.onThemeChanged((isDark: boolean) => {
       setSettings(s => {
         // 只有用户没有手动覆盖时才跟随系统
         const followed = localStorage.getItem('meetingRecorderSettings')
@@ -60,6 +60,10 @@ export default function SettingsView() {
         return { ...s, darkMode: isDark }
       })
     })
+
+    return () => {
+      offThemeChanged()
+    }
   }, [])
 
   // 获取模型信息

@@ -10,6 +10,7 @@
 
 import numpy as np
 import sys
+from model_paths import get_silero_repo_dir
 from typing import List, Dict, Optional
 
 # ─── 本地说话人分割实现 ───────────────────────────────────────
@@ -207,11 +208,16 @@ def _get_speech_timestamps(
         import torch
         torch.set_num_threads(1)
 
-        model, utils = torch.hub.load(
-            repo_or_dir='snakers4/silero-vad',
-            model='silero_vad',
-            trust_repo=True
-        )
+        repo_or_dir = get_silero_repo_dir() or 'snakers4/silero-vad'
+        load_kwargs = {
+            'repo_or_dir': repo_or_dir,
+            'model': 'silero_vad',
+            'trust_repo': True,
+        }
+        if repo_or_dir != 'snakers4/silero-vad':
+            load_kwargs['source'] = 'local'
+
+        model, utils = torch.hub.load(**load_kwargs)
         get_speech_ts = utils[0]
 
         if audio.dtype != np.float32:

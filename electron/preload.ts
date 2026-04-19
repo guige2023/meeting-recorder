@@ -3,6 +3,14 @@ import { contextBridge, ipcRenderer } from 'electron'
 // 调试日志
 console.log('[preload] script loaded, electron:', process.versions.electron)
 
+function subscribe(channel: string, callback: (...args: any[]) => void) {
+  const listener = (_event: Electron.IpcRendererEvent, ...args: any[]) => callback(...args)
+  ipcRenderer.on(channel, listener)
+  return () => {
+    ipcRenderer.removeListener(channel, listener)
+  }
+}
+
 contextBridge.exposeInMainWorld('electronAPI', {
   // Python RPC 调用
   pythonCall: (method: string, params?: any) => ipcRenderer.invoke('python_call', method, params),
@@ -26,12 +34,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // 主题
   getDarkMode: () => ipcRenderer.invoke('get_dark_mode'),
   setDarkMode: (dark: boolean) => ipcRenderer.invoke('set_dark_mode', dark),
-  onThemeChanged: (callback: (isDark: boolean) => void) => {
-    ipcRenderer.on('theme_changed', (_event, isDark) => callback(isDark))
-  },
+  onThemeChanged: (callback: (isDark: boolean) => void) => subscribe('theme_changed', callback),
 
   // 打开系统麦克风权限设置
   openMicrophonePermission: () => ipcRenderer.invoke('open_microphone_permission'),
+  requestMicrophoneAccess: () => ipcRenderer.invoke('request_microphone_access'),
 
   // 设置
   saveSettings: (settings: Record<string, any>) => ipcRenderer.invoke('save_settings', settings),
@@ -47,64 +54,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.invoke('cleanup_old_recordings', days != null ? { days } : {}),
 
   // 监听 Python 推送的消息
-  onCaptureStatus: (callback: (data: any) => void) => {
-    ipcRenderer.on('capture_status', (_event, data) => callback(data))
-  },
-  onRealtimeCaption: (callback: (data: any) => void) => {
-    ipcRenderer.on('realtime_caption', (_event, data) => callback(data))
-  },
-  onProcessingProgress: (callback: (data: any) => void) => {
-    ipcRenderer.on('processing_progress', (_event, data) => callback(data))
-  },
-  onPythonReady: (callback: () => void) => {
-    ipcRenderer.on('python_ready', () => callback())
-  },
-  onPythonError: (callback: (msg: string) => void) => {
-    ipcRenderer.on('python_error', (_event, msg) => callback(msg))
-  },
-  onEnvNotice: (callback: (data: any) => void) => {
-    ipcRenderer.on('env_notice', (_event, data) => callback(data))
-  },
-  onModelDownload: (callback: (data: any) => void) => {
-    ipcRenderer.on('model_download', (_event, data) => callback(data))
-  },
-  onTrayAction: (callback: (action: string) => void) => {
-    ipcRenderer.on('tray_action', (_event, action) => callback(action))
-  },
-  removeAllListeners: (channel: string) => {
-    ipcRenderer.removeAllListeners(channel)
-  }
+  onCaptureStatus: (callback: (data: any) => void) => subscribe('capture_status', callback),
+  onRealtimeCaption: (callback: (data: any) => void) => subscribe('realtime_caption', callback),
+  onProcessingProgress: (callback: (data: any) => void) => subscribe('processing_progress', callback),
+  onProcessingError: (callback: (data: any) => void) => subscribe('processing_error', callback),
+  onPythonReady: (callback: () => void) => subscribe('python_ready', callback),
+  onPythonError: (callback: (msg: string) => void) => subscribe('python_error', callback),
+  onEnvNotice: (callback: (data: any) => void) => subscribe('env_notice', callback),
+  onModelDownload: (callback: (data: any) => void) => subscribe('model_download', callback),
+  onTrayAction: (callback: (action: string) => void) => subscribe('tray_action', callback),
 })
 
 console.log('[preload] electronAPI exposed')
-
-// 全局类型声明（仅供 IDE 使用，不影响运行时）
-declare global {
-  interface Window {
-    electronAPI: {
-      pythonCall: (method: string, params?: any) => Promise<any>
-      importAudioFile: (srcPath: string) => Promise<{ meetingId: string; audioPath: string }>
-      selectFile: () => Promise<string[]>
-      selectSavePath: (options?: { defaultPath?: string; filters?: { name: string; extensions: string[] }[] }) => Promise<string | null>
-      getAppPath: () => Promise<string>
-      getAudioUrl: (filePath: string) => Promise<string>
-      getDarkMode: () => Promise<boolean>
-      setDarkMode: (dark: boolean) => Promise<any>
-      onThemeChanged: (callback: (isDark: boolean) => void) => void
-      saveSettings: (settings: Record<string, any>) => Promise<any>
-      getSettings: () => Promise<Record<string, any>>
-      showItemInFolder: (path: string) => Promise<void>
-      getOldRecordings: (days?: number) => Promise<{ count: number; fileCount: number; totalBytes: number; meetings: any[] }>
-      cleanupOldRecordings: (days?: number) => Promise<{ deletedFiles: number; deletedRecords: number; freedBytes: number }>
-      onCaptureStatus: (callback: (data: any) => void) => void
-      onRealtimeCaption: (callback: (data: any) => void) => void
-      onProcessingProgress: (callback: (data: any) => void) => void
-      onPythonReady: (callback: () => void) => void
-      onPythonError: (callback: (msg: string) => void) => void
-      onEnvNotice: (callback: (data: any) => void) => void
-      onModelDownload: (callback: (data: any) => void) => void
-      onTrayAction: (callback: (action: string) => void) => void
-      removeAllListeners: (channel: string) => void
-    }
-  }
-}

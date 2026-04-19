@@ -5,6 +5,7 @@
 
 import numpy as np
 from typing import List, Dict, Optional
+from model_paths import get_sensevoice_model_dir
 
 class Transcriber:
     def __init__(self, device: str = 'cpu'):
@@ -30,15 +31,10 @@ class Transcriber:
             os.environ['CUDA_VISIBLE_DEVICES'] = ''
 
             # 如果设置了 MODELSCOPE_CACHE（由 Electron main.ts 传入），使用本地模型
-            model_cache = os.environ.get('MODELSCOPE_CACHE', '')
-            if model_cache:
-                # 模型在 MODELSCOPE_CACHE/models/iic/SenseVoiceSmall
-                local_model = os.path.join(model_cache, 'models', 'iic', 'SenseVoiceSmall')
-                if os.path.isdir(local_model):
-                    model_path = local_model
-                    print(f'Using local model: {model_path}', file=__import__('sys').stderr)
-                else:
-                    model_path = 'iic/SenseVoiceSmall'
+            local_model = get_sensevoice_model_dir()
+            if local_model:
+                model_path = local_model
+                print(f'Using local model: {model_path}', file=__import__('sys').stderr)
             else:
                 model_path = 'iic/SenseVoiceSmall'
 

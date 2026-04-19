@@ -13,6 +13,12 @@ import numpy as np
 from datetime import datetime
 from pathlib import Path
 from typing import List, Dict, Optional
+from model_paths import get_sensevoice_model_dir
+
+try:
+    from funasr.utils.postprocess_utils import rich_transcription_postprocess
+except Exception:
+    rich_transcription_postprocess = None
 
 # 数据库路径（由 __init__ 注入，见 _DATA_DIR 全局变量）
 DATA_DIR: str = None  # type: ignore
@@ -109,14 +115,10 @@ class TranscriptionService:
                 os.environ['CUDA_VISIBLE_DEVICES'] = ''
 
                 # 如果设置了 MODELSCOPE_CACHE，使用本地模型
-                model_cache = os.environ.get('MODELSCOPE_CACHE', '')
-                if model_cache:
-                    local_model = os.path.join(model_cache, 'models', 'iic', 'SenseVoiceSmall')
-                    if os.path.isdir(local_model):
-                        model_path = local_model
-                        print(f'Using local model: {model_path}', file=sys.stderr)
-                    else:
-                        model_path = 'iic/SenseVoiceSmall'
+                local_model = get_sensevoice_model_dir()
+                if local_model:
+                    model_path = local_model
+                    print(f'Using local model: {model_path}', file=sys.stderr)
                 else:
                     model_path = 'iic/SenseVoiceSmall'
 
@@ -151,6 +153,27 @@ class TranscriptionService:
             }
         }
         print(json.dumps(msg), flush=True)
+
+    def _validate_audio_content(self, file_path: str):
+        """在真正跑 ASR 前拦截空音频/近乎静音的输入。"""
+        import soundfile as sf
+
+        audio_data, sample_rate = sf.read(file_path, dtype='float32')
+        if audio_data.ndim > 1:
+            audio_data = audio_data.mean(axis=1)
+
+        if len(audio_data) == 0:
+            raise ValueError('音频文件为空，无法识别')
+
+        rms = float(np.sqrt(np.mean(audio_data ** 2)))
+        peak = float(np.max(np.abs(audio_data)))
+        duration = len(audio_data) / float(sample_rate or 1)
+
+        if duration < 0.2:
+            raise ValueError('音频时长过短，无法识别')
+
+        if rms < 1e-4 and peak < 1e-3:
+            raise ValueError('录音内容为空或音量过低，请检查麦克风权限、输入设备和系统输入音量')
 
     def create_meeting_from_audio(self, file_path: str) -> str:
         """创建会议记录（用于导入外部音频文件），返回 meeting_id"""
@@ -218,8 +241,35 @@ class TranscriptionService:
             ''', (meeting_id, f'会议 {now.strftime("%Y-%m-%d %H:%M")}', timestamp, file_path, 'processing', duration))
             conn.commit()
             conn.close()
+        else:
+            conn = sqlite3.connect(_get_db_path())
+            c = conn.cursor()
+            c.execute('SELECT id FROM meetings WHERE id = ?', (meeting_id,))
+            exists = c.fetchone() is not None
+            if not exists:
+                now = datetime.now()
+                timestamp = now.timestamp()
+                try:
+                    import soundfile as sf
+                    audio_info = sf.info(file_path)
+                    duration = audio_info.duration
+                except:
+                    duration = 0
+
+                title = os.path.splitext(os.path.basename(file_path))[0]
+                if len(title) > 60:
+                    title = title[:60]
+
+                c.execute('''
+                    INSERT INTO meetings (id, title, created_at, audio_path, status, duration)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                ''', (meeting_id, title, timestamp, file_path, 'processing', duration))
+                conn.commit()
+            conn.close()
 
         self._send_progress(meeting_id, 0.05, '正在加载模型...')
+        self._send_progress(meeting_id, 0.08, '正在检查音频...')
+        self._validate_audio_content(file_path)
 
         # 步骤1: 说话人分割（完全本地）
         self._send_progress(meeting_id, 0.1, '正在识别说话人...')
@@ -259,33 +309,73 @@ class TranscriptionService:
         conn.close()
 
         self._send_progress(meeting_id, 1.0, '处理完成')
+        return {'meetingId': meeting_id, 'status': 'completed'}
+
+    def mark_meeting_failed(self, meeting_id: Optional[str], error: str):
+        """将会议标记为失败，避免前端永远停留在 processing 状态。"""
+        if not meeting_id:
+            return
+
+        conn = sqlite3.connect(_get_db_path())
+        c = conn.cursor()
+        c.execute(
+            'UPDATE meetings SET status = ?, notes = ? WHERE id = ?',
+            ('failed', error, meeting_id)
+        )
+        conn.commit()
+        conn.close()
 
     def _run_diarization(self, audio_path: str) -> List[Dict]:
         """运行说话人分割（完全本地实现，不依赖外部 API）"""
         from diarizer import compute_diarization_local
         return compute_diarization_local(audio_path, min_speakers=2, max_speakers=8)
 
+    def _clean_special_tokens(self, text: str) -> str:
+        """清理 SenseVoice 输出的特殊 token 噪声"""
+        import re
+        # 移除 <|...|> 形式的特殊 token
+        text = re.sub(r'<\|[^|]+\|>', '', text)
+        # 移除独立出现的特殊标记
+        text = re.sub(r'<\|ur\|>', '', text)
+        text = re.sub(r'<\|am\|>', '', text)
+        text = re.sub(r'<\|tk\|>', '', text)
+        text = re.sub(r'<\|fr\|>', '', text)
+        text = re.sub(r'<\|SPECIAL_TOKEN_\d+\|>', '', text)
+        # 合并多余空格
+        text = re.sub(r'\s+', ' ', text)
+        return text.strip()
+
     def _run_transcription(self, audio_path: str, language: str) -> List[Dict]:
         """运行语音转写"""
+        # 强制使用中文，避免 auto 检测出错导致日文/韩文噪声
+        forced_lang = 'zh' if language == 'auto' else language
+
         result = self.transcription_model.generate(
             input=audio_path,
-            language='auto' if language == 'auto' else language,
+            language=forced_lang,
             use_itn=True,
-            batch_size_s=60
+            batch_size_s=30
         )
 
         segments = []
         if result and len(result) > 0:
             res = result[0]
             text = res.get('text', '')
+            if rich_transcription_postprocess and text:
+                text = rich_transcription_postprocess(text)
+            text = self._clean_special_tokens(text)
             timestamp = res.get('timestamp', [])
 
             if timestamp:
                 for item in timestamp:
+                    seg_text = item[2]
+                    if rich_transcription_postprocess and seg_text:
+                        seg_text = rich_transcription_postprocess(seg_text)
+                    seg_text = self._clean_special_tokens(seg_text)
                     segments.append({
                         'start': item[0] / 1000.0,
                         'end': item[1] / 1000.0,
-                        'text': item[2]
+                        'text': seg_text
                     })
             else:
                 segments.append({

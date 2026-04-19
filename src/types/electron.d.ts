@@ -26,6 +26,11 @@ interface ProcessingProgressData {
   message: string
 }
 
+interface ProcessingErrorData {
+  meetingId: string
+  error: string
+}
+
 interface CaptureStatusData {
   recordingId: string
   duration: number
@@ -53,28 +58,29 @@ interface ModelDownloadData {
 interface ElectronAPI {
   pythonCall: (method: string, params?: Record<string, unknown>) => Promise<any>
   openMicrophonePermission: () => Promise<{ status: string }>
+  requestMicrophoneAccess: () => Promise<{ status: string; granted: boolean; error?: string }>
   selectFile: () => Promise<string[]>
-  importAudioFile: (srcPath: string) => Promise<{ meetingId: string; audioPath: string }>
+  importAudioFile: (srcPath: string) => Promise<{ audioPath: string }>
   selectSavePath: (options?: { defaultPath?: string; filters?: { name: string; extensions: string[] }[] }) => Promise<string | null>
   getAppPath: () => Promise<string>
   getAudioUrl: (filePath: string) => Promise<string>
   getDarkMode: () => Promise<boolean>
   setDarkMode: (dark: boolean) => Promise<any>
-  onThemeChanged: (callback: (isDark: boolean) => void) => void
+  onThemeChanged: (callback: (isDark: boolean) => void) => () => void
   saveSettings: (settings: Record<string, any>) => Promise<any>
   getSettings: () => Promise<Record<string, any>>
   showItemInFolder: (path: string) => Promise<void>
   getOldRecordings: (days?: number) => Promise<{ count: number; fileCount: number; totalBytes: number; meetings: any[] }>
   cleanupOldRecordings: (days?: number) => Promise<{ deletedFiles: number; deletedRecords: number; freedBytes: number }>
-  onCaptureStatus: (callback: (data: CaptureStatusData) => void) => void
-  onRealtimeCaption: (callback: (data: RealtimeCaptionData) => void) => void
-  onProcessingProgress: (callback: (data: ProcessingProgressData) => void) => void
-  onPythonReady: (callback: () => void) => void
-  onPythonError: (callback: (msg: string) => void) => void
-  onEnvNotice: (callback: (data: EnvNoticeData) => void) => void
-  onModelDownload: (callback: (data: ModelDownloadData) => void) => void
-  onTrayAction: (callback: (action: string) => void) => void
-  removeAllListeners: (channel: string) => void
+  onCaptureStatus: (callback: (data: CaptureStatusData) => void) => () => void
+  onRealtimeCaption: (callback: (data: RealtimeCaptionData) => void) => () => void
+  onProcessingProgress: (callback: (data: ProcessingProgressData) => void) => () => void
+  onProcessingError: (callback: (data: ProcessingErrorData) => void) => () => void
+  onPythonReady: (callback: () => void) => () => void
+  onPythonError: (callback: (msg: string) => void) => () => void
+  onEnvNotice: (callback: (data: EnvNoticeData) => void) => () => void
+  onModelDownload: (callback: (data: ModelDownloadData) => void) => () => void
+  onTrayAction: (callback: (action: string) => void) => () => void
 }
 
 declare global {

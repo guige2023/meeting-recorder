@@ -37,7 +37,13 @@ export default function OnboardingGuide({ onComplete }: Props) {
   }, [step, modelInfo])
 
   const handleOpenMicPermission = () => {
-    window.electronAPI.openMicrophonePermission()
+    window.electronAPI.requestMicrophoneAccess().then((result) => {
+      if (!result.granted) {
+        window.electronAPI.openMicrophonePermission()
+      }
+    }).catch(() => {
+      window.electronAPI.openMicrophonePermission()
+    })
   }
 
   const handleComplete = () => {
@@ -181,8 +187,8 @@ export default function OnboardingGuide({ onComplete }: Props) {
               <div className="flex items-center gap-3 p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-xl">
                 <AlertCircle size={24} className="text-yellow-500" />
                 <div>
-                  <p className="font-medium text-yellow-700 dark:text-yellow-400">部分模型缺失</p>
-                  <p className="text-sm text-yellow-600 dark:text-yellow-500">首次转写时将自动下载所需模型</p>
+                  <p className="font-medium text-yellow-700 dark:text-yellow-400">模型状态异常</p>
+                  <p className="text-sm text-yellow-600 dark:text-yellow-500">未检测到完整模型包，请重新安装当前版本应用</p>
                 </div>
               </div>
             )}

@@ -13,6 +13,7 @@ import time
 import wave
 import os
 import uuid
+import sys
 from collections import deque
 from datetime import datetime
 
@@ -235,5 +236,3 @@ class AudioCapture:
         os.makedirs(save_dir, exist_ok=True)
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         return os.path.join(save_dir, f'meeting_{timestamp}_{recording_id[:8]}.wav')
-
-import sys

@@ -67,6 +67,7 @@ interface MeetingState {
   setProcessingProgress: (meetingId: string, progress: number, message: string) => void
   clearProcessingProgress: (meetingId: string) => void
   updateSpeaker: (speakerId: string, updates: Partial<Speaker>) => Promise<void>
+  setMeetingStatus: (meetingId: string, status: Meeting['status'], notes?: string) => void
   clearCache: () => Promise<{ cleared: number }>
   clearData: () => Promise<void>
 }
@@ -181,13 +182,23 @@ export const useMeetingStore = create<MeetingState>((set, get) => ({
 
   updateSpeaker: async (speakerId, updates) => {
     try {
-      await window.electronAPI.pythonCall('update_meeting', {
-        id: null,
-        updates: { speakerUpdates: { [speakerId]: updates } }
+      await window.electronAPI.pythonCall('update_speaker', {
+        speakerId,
+        updates,
       })
     } catch (err) {
       console.error('Failed to update speaker:', err)
     }
+  },
+
+  setMeetingStatus: (meetingId, status, notes) => {
+    set(state => ({
+      meetings: state.meetings.map(m =>
+        m.id === meetingId
+          ? { ...m, status, ...(notes != null ? { notes } : {}) }
+          : m
+      )
+    }))
   },
 
   clearCache: async () => {

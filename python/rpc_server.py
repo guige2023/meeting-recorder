@@ -14,6 +14,7 @@ import subprocess
 import zipfile
 import tempfile
 import datetime as dt
+from model_paths import get_model_inventory
 
 # 解析命令行参数
 _DATA_DIR = None
@@ -80,58 +81,47 @@ def get_model_cache_size():
 
 def get_model_info():
     """获取捆绑模型的信息"""
-    # 获取模型目录路径（从环境变量或默认值）
-    models_dir = os.environ.get('MODELSCOPE_CACHE')
-    if not models_dir or not os.path.exists(models_dir):
-        # 尝试开发环境默认路径
-        dev_path = '/Users/guige/my_project/meeting-recorder/models'
-        if os.path.exists(dev_path):
-            models_dir = dev_path
-        else:
-            return {'models': [], 'totalSize': 0, 'status': 'not_found'}
-
     models_info = []
     total_size = 0
     total_files = 0
 
-    # 定义要检测的模型及其路径模式
-    model_patterns = {
-        'SenseVoiceSmall': ['hub', 'models', 'iic', 'SenseVoiceSmall'],
-        'Silero-VAD': ['torch', 'hub', 'snakers4_silero-vad_master', 'src', 'silero_vad', 'data'],
-    }
-
     try:
-        for root, dirs, files in os.walk(models_dir):
-            # 计算当前目录的大小
-            dir_size = 0
-            dir_files = 0
-            for f in files:
-                try:
-                    dir_size += os.path.getsize(os.path.join(root, f))
-                    dir_files += 1
-                except:
-                    pass
+        inventory = get_model_inventory()
+        if not inventory:
+            return {'models': [], 'totalSize': 0, 'status': 'not_found'}
 
-            if dir_size > 0:
-                # 判断是哪个模型
-                rel_path = os.path.relpath(root, models_dir)
-                path_parts = rel_path.split(os.sep)
+        expected_models = {'SenseVoiceSmall', 'Silero-VAD'}
 
-                model_name = None
-                for name, pattern in model_patterns.items():
-                    if any(p in path_parts for p in pattern):
-                        model_name = name
-                        break
+        for model_name, meta in inventory.items():
+            path = meta.get('path')
+            if not path or not os.path.exists(path):
+                continue
 
-                if model_name:
-                    models_info.append({
-                        'name': model_name,
-                        'path': root,
-                        'sizeBytes': dir_size,
-                        'fileCount': dir_files,
-                    })
-                    total_size += dir_size
-                    total_files += dir_files
+            size_bytes = 0
+            file_count = 0
+            if os.path.isfile(path):
+                size_bytes = os.path.getsize(path)
+                file_count = 1
+            else:
+                for root, dirs, files in os.walk(path):
+                    for filename in files:
+                        try:
+                            size_bytes += os.path.getsize(os.path.join(root, filename))
+                            file_count += 1
+                        except:
+                            pass
+
+            models_info.append({
+                'name': model_name,
+                'path': path,
+                'sizeBytes': size_bytes,
+                'fileCount': file_count,
+            })
+            total_size += size_bytes
+            total_files += file_count
+
+        found_models = {item['name'] for item in models_info}
+        status = 'ok' if expected_models.issubset(found_models) else 'empty'
 
     except Exception as e:
         return {'models': [], 'totalSize': 0, 'status': 'error', 'error': str(e)}
@@ -140,7 +130,7 @@ def get_model_info():
         'models': models_info,
         'totalSize': total_size,
         'totalFiles': total_files,
-        'status': 'ok' if models_info else 'empty',
+        'status': status,
     }
 
 def redownload_models():
@@ -282,10 +272,9 @@ def handle_request(method, params, rpc_id):
                 else:
                     return {'error': f'不支持的音频格式: {ext}'}
 
-            # 生成 meetingId（如果未提供）
             meeting_id = params.get('meetingId')
             if not meeting_id:
-                meeting_id = str(uuid.uuid4())
+                meeting_id = transcription_service.create_meeting_from_audio(file_path)
 
             # 后台处理
             def _process():
@@ -297,6 +286,7 @@ def handle_request(method, params, rpc_id):
                     )
                 except Exception as e:
                     traceback.print_exc()
+                    transcription_service.mark_meeting_failed(meeting_id, str(e))
                     send_notification('processing_error', {
                         'meetingId': meeting_id,
                         'error': str(e)
@@ -315,6 +305,9 @@ def handle_request(method, params, rpc_id):
             return {'status': 'ok'}
         elif method == 'update_meeting':
             transcription_service.update_meeting(params['id'], params.get('updates', {}))
+            return {'status': 'updated'}
+        elif method == 'update_speaker':
+            transcription_service.update_speaker(params['speakerId'], params.get('updates', {}))
             return {'status': 'updated'}
         elif method == 'search_meetings':
             return transcription_service.search_meetings(params)

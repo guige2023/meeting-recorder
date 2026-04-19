@@ -7,11 +7,13 @@ import {
   Menu,
   globalShortcut,
   nativeTheme,
-  shell
+  shell,
+  systemPreferences
 } from 'electron'
 import { join, extname } from 'path'
 import { spawn, ChildProcess } from 'child_process'
 import * as fs from 'fs'
+import { pathToFileURL } from 'url'
 
 let mainWindow: BrowserWindow | null = null
 let tray: Tray | null = null
@@ -35,8 +37,8 @@ function getBundledPythonDir(): string {
   if (app.isPackaged) {
     return join(process.resourcesPath, 'bundled-python')
   }
-  // __dirname = dist-electron/, 所以 ../../../ 回到项目根目录
-  return join(__dirname, '..', '..', '..', 'bundled-python')
+  // __dirname = dist-electron/, 所以 ../../ 回到项目根目录
+  return join(__dirname, '..', '..', 'bundled-python')
 }
 
 function getPythonPath(): string {
@@ -48,7 +50,7 @@ function getModelsDir(): string {
   if (app.isPackaged) {
     return join(process.resourcesPath, 'models')
   }
-  return join(__dirname, '..', '..', '..', 'models')
+  return join(__dirname, '..', '..', 'models')
 }
 
 function getPythonDir(): string {
@@ -314,6 +316,7 @@ function startPythonServer() {
       // 让 modelscope 和 torch 从 bundled models/ 读取模型
       'MODELSCOPE_CACHE': modelCacheDir,
       'TORCH_HUB_DIR': torchHubDir,
+      'APP_MODELS_DIR': modelsDir,
       // 让系统 Python 能找到 bundled-python 的 site-packages
       'PYTHONPATH': join(pythonDir, 'lib', 'python3.9', 'site-packages'),
       // ffmpeg 路径（用于 pydub 音频转换）
@@ -478,9 +481,8 @@ ipcMain.handle('get_app_path', () => {
 
 ipcMain.handle('get_audio_url', (_event, filePath: string) => {
   if (!filePath) return ''
-  // 将本地路径转为 file:// URL
   if (filePath.startsWith('file://')) return filePath
-  return `file://${encodeURIComponent(filePath)}`
+  return pathToFileURL(filePath).toString()
 })
 
 ipcMain.handle('get_dark_mode', () => {
@@ -515,6 +517,29 @@ ipcMain.handle('open_microphone_permission', async () => {
     shell.openExternal('ms-settings:privacy-microphone')
   }
   return { status: 'ok' }
+})
+
+ipcMain.handle('request_microphone_access', async () => {
+  if (process.platform !== 'darwin') {
+    return { status: 'granted', granted: true }
+  }
+
+  const currentStatus = systemPreferences.getMediaAccessStatus('microphone')
+  if (currentStatus === 'granted') {
+    return { status: currentStatus, granted: true }
+  }
+
+  try {
+    const granted = await systemPreferences.askForMediaAccess('microphone')
+    const status = systemPreferences.getMediaAccessStatus('microphone')
+    return { status, granted }
+  } catch (error) {
+    return {
+      status: currentStatus,
+      granted: false,
+      error: error instanceof Error ? error.message : String(error),
+    }
+  }
 })
 
 ipcMain.handle('show_item_in_folder', (_event, path: string) => {

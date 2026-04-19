@@ -10,6 +10,12 @@ import queue
 import json
 import sys
 import time
+from model_paths import get_sensevoice_model_dir
+
+try:
+    from funasr.utils.postprocess_utils import rich_transcription_postprocess
+except Exception:
+    rich_transcription_postprocess = None
 
 # 复用已有的 VAD
 from vad import VAD
@@ -41,14 +47,10 @@ class RealtimeTranscriber:
             os.environ['CUDA_VISIBLE_DEVICES'] = ''
 
             # 如果设置了 MODELSCOPE_CACHE，使用本地模型
-            model_cache = os.environ.get('MODELSCOPE_CACHE', '')
-            if model_cache:
-                local_model = os.path.join(model_cache, 'models', 'iic', 'SenseVoiceSmall')
-                if os.path.isdir(local_model):
-                    model_path = local_model
-                    print(f'Realtime: using local model: {model_path}', file=sys.stderr)
-                else:
-                    model_path = 'iic/SenseVoiceSmall'
+            local_model = get_sensevoice_model_dir()
+            if local_model:
+                model_path = local_model
+                print(f'Realtime: using local model: {model_path}', file=sys.stderr)
             else:
                 model_path = 'iic/SenseVoiceSmall'
 
@@ -87,13 +89,21 @@ class RealtimeTranscriber:
             return ''
 
         try:
+            forced_lang = 'zh' if language == 'auto' else language
             result = self.model.generate(
                 input=audio,
-                language='auto' if language == 'auto' else language,
+                language=forced_lang,
                 use_itn=True
             )
             if result:
-                return result[0].get('text', '')
+                text = result[0].get('text', '')
+                if rich_transcription_postprocess and text:
+                    text = rich_transcription_postprocess(text)
+                # 清理特殊 token 噪声
+                import re
+                text = re.sub(r'<\|[^|]+\|>', '', text)
+                text = re.sub(r'\s+', ' ', text).strip()
+                return text
         except Exception as e:
             print(f'Transcribe error: {e}', file=sys.stderr)
 

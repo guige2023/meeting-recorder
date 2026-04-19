@@ -6,6 +6,7 @@
 
 import os
 import tempfile
+import subprocess
 import numpy as np
 from typing import Optional
 
@@ -68,24 +69,36 @@ def convert_to_wav(input_path: str, target_sample_rate: int = 16000) -> Optional
         except Exception as e:
             print(f'soundfile failed: {e}, trying pydub...', file=__import__('sys').stderr)
         
-        # fallback: 尝试 pydub（需要 ffmpeg）
-        from pydub import AudioSegment
-        
-        # 设置 ffmpeg 路径
         ffmpeg_path = _get_ffmpeg_path()
-        if ffmpeg_path:
-            AudioSegment.converter = ffmpeg_path
-        
-        audio = AudioSegment.from_file(input_path)
-        
-        if audio.channels > 1:
-            audio = audio.set_channels(1)
-        if audio.frame_rate != target_sample_rate:
-            audio = audio.set_frame_rate(target_sample_rate)
-        
+        if not ffmpeg_path:
+            print('ffmpeg not found for audio conversion', file=__import__('sys').stderr)
+            return None
+
         output_fd, output_path = tempfile.mkstemp(suffix='.wav')
         os.close(output_fd)
-        audio.export(output_path, format='wav', codec='pcm_s16le')
+
+        cmd = [
+            ffmpeg_path,
+            '-y',
+            '-i', input_path,
+            '-ac', '1',
+            '-ar', str(target_sample_rate),
+            '-c:a', 'pcm_s16le',
+            output_path,
+        ]
+        proc = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+        if proc.returncode != 0 or not os.path.isfile(output_path):
+            print(f'ffmpeg conversion failed: {proc.stderr.decode("utf-8", errors="ignore")}', file=__import__('sys').stderr)
+            try:
+                os.remove(output_path)
+            except OSError:
+                pass
+            return None
         return output_path
 
     except Exception as e:
@@ -100,11 +113,7 @@ def _resample(audio_data: np.ndarray, old_sr: int, new_sr: int) -> np.ndarray:
     from scipy import signal
     if len(audio_data) == 0:
         return audio_data
-    new_length = int(len(audio_data) * new_sr / old_sr)
-    if new_length <= 0:
-        new_length = 1
-    num = max(1, new_length)
-    resampled = signal.resample_poly(audio_data, num, old_sr)
+    resampled = signal.resample_poly(audio_data, new_sr, old_sr)
     return resampled
 
 
@@ -121,15 +130,46 @@ def get_audio_info(path: str) -> dict:
         }
     except Exception as e:
         try:
-            from pydub import AudioSegment
             ffmpeg_path = _get_ffmpeg_path()
-            if ffmpeg_path:
-                AudioSegment.converter = ffmpeg_path
-            audio = AudioSegment.from_file(path)
+            if not ffmpeg_path:
+                return {'error': str(e)}
+
+            output = subprocess.run(
+                [
+                    ffmpeg_path,
+                    '-i', path,
+                    '-f', 'null',
+                    '-'
+                ],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            stderr = output.stderr.decode('utf-8', errors='ignore')
+            duration = 0.0
+            sample_rate = 0
+            channels = 0
+            for line in stderr.splitlines():
+                if 'Duration:' in line:
+                    duration_part = line.split('Duration:')[-1].split(',')[0].strip()
+                    h, m, s = duration_part.split(':')
+                    duration = int(h) * 3600 + int(m) * 60 + float(s)
+                if 'Audio:' in line and sample_rate == 0:
+                    parts = [part.strip() for part in line.split(',')]
+                    for part in parts:
+                        if part.endswith('Hz'):
+                            try:
+                                sample_rate = int(part.replace('Hz', '').strip())
+                            except ValueError:
+                                pass
+                        elif 'mono' in part:
+                            channels = 1
+                        elif 'stereo' in part:
+                            channels = 2
             return {
-                'duration': len(audio) / 1000.0,
-                'sampleRate': audio.frame_rate,
-                'channels': audio.channels,
+                'duration': duration,
+                'sampleRate': sample_rate,
+                'channels': channels,
                 'format': os.path.splitext(path)[1].lstrip('.').upper()
             }
         except Exception:

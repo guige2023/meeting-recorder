@@ -1,11 +1,10 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import { Mic, Square, Pause, Play, Upload, Volume2, X, FileAudio } from 'lucide-react'
 import Waveform from './Waveform'
 import RealtimeCaptions from './RealtimeCaptions'
 import { useRecorderStore } from '@/stores/recorderStore'
-import { useMeetingStore, MeetingDetail, Segment } from '@/stores/meetingStore'
-
-type RecordingStatus = 'idle' | 'recording' | 'paused' | 'processing'
+import { useMeetingStore, MeetingDetail } from '@/stores/meetingStore'
+import { startAudioProcessing } from '@/lib/audioProcessing'
 
 interface ImportProgress {
   meetingId: string
@@ -39,30 +38,28 @@ export default function RecorderView() {
   const [transcriptionResult, setTranscriptionResult] = useState<MeetingDetail | null>(null)
   const [showResult, setShowResult] = useState(false)
 
-  // Listen for processing progress from Python via Electron IPC
   useEffect(() => {
-    window.electronAPI.onProcessingProgress((data) => {
-      const { meetingId, progress, message } = data
-      setProcessingProgress(meetingId, progress, message)
-
-      // When progress reaches 100%, fetch the result
-      if (progress >= 1.0) {
-        // Wait a bit for DB write to complete
-        setTimeout(async () => {
-          const detail = await getMeetingDetail(meetingId)
-          if (detail) {
-            setTranscriptionResult(detail)
-            setShowResult(true)
-          }
-          clearProcessingProgress(meetingId)
-        }, 1000)
-      }
-    })
-
-    return () => {
-      window.electronAPI.removeAllListeners('processing_progress')
+    const currentImport = importProgress
+    if (!currentImport) {
+      return
     }
-  }, [setProcessingProgress, clearProcessingProgress, getMeetingDetail])
+
+    const meetingProgress = processingProgress[currentImport.meetingId]
+    if (!meetingProgress || meetingProgress.progress < 1) {
+      return
+    }
+
+    const timer = window.setTimeout(async () => {
+      const detail = await getMeetingDetail(currentImport.meetingId)
+      if (detail) {
+        setTranscriptionResult(detail)
+        setShowResult(true)
+      }
+      clearProcessingProgress(currentImport.meetingId)
+    }, 1000)
+
+    return () => window.clearTimeout(timer)
+  }, [clearProcessingProgress, getMeetingDetail, importProgress, processingProgress])
 
   const handleStart = async () => {
     await startRecording()
@@ -87,14 +84,10 @@ export default function RecorderView() {
     const filePath = files[0]
     const fileName = filePath.split(/[/\\]/).pop() || '未知文件'
 
-    // Start processing — Python sends progress via IPC
     try {
-      const result = await window.electronAPI.pythonCall('process_file', {
-        filePath,
-        language: 'zh'
-      }) as { meetingId?: string }
-
-      if (result?.meetingId) {
+      const result = await startAudioProcessing(filePath)
+      if (result.meetingId) {
+        setProcessingProgress(result.meetingId, 0, '正在导入并转写...')
         setImportProgress({
           meetingId: result.meetingId,
           fileName,
@@ -104,12 +97,14 @@ export default function RecorderView() {
       }
     } catch (err) {
       console.error('Failed to start processing:', err)
+      alert(`导入失败: ${err instanceof Error ? err.message : '无法处理该音频文件'}`)
     }
   }
 
   const closeResult = () => {
     setShowResult(false)
     setTranscriptionResult(null)
+    setImportProgress(null)
   }
 
   const formatTime = (seconds: number) => {

@@ -4,10 +4,7 @@ import HistoryView from './components/HistoryView/HistoryView'
 import SettingsView from './components/SettingsView/SettingsView'
 import OnboardingGuide from './components/OnboardingGuide'
 import { Mic, FileText, Settings } from 'lucide-react'
-
-// DEBUG: 检查 electronAPI 是否注入
-console.log('[App] electronAPI type:', typeof window.electronAPI)
-console.log('[App] electronAPI keys:', window.electronAPI ? Object.keys(window.electronAPI) : 'null/undefined')
+import { useMeetingStore } from './stores/meetingStore'
 
 type Tab = 'recorder' | 'history' | 'settings'
 
@@ -19,10 +16,10 @@ function App() {
   const [modelDownload, setModelDownload] = useState<string | null>(null)
   const [installMessage, setInstallMessage] = useState<string | null>(null)
   const [pythonReady, setPythonReady] = useState(false)
+  const { fetchMeetings, setProcessingProgress, clearProcessingProgress, setMeetingStatus } = useMeetingStore()
 
   useEffect(() => {
     if (!window.electronAPI) {
-      console.error('[App] electronAPI not available yet!')
       return
     }
 
@@ -50,12 +47,12 @@ function App() {
     })
 
     // Python ready
-    window.electronAPI.onPythonReady(() => {
+    const offPythonReady = window.electronAPI.onPythonReady(() => {
       setPythonReady(true)
     })
 
     // 环境通知（pip install 进度 / 安装结果）
-    window.electronAPI.onEnvNotice((data) => {
+    const offEnvNotice = window.electronAPI.onEnvNotice((data) => {
       if (data.type === 'installing') {
         setInstallMessage(data.message)
       } else if (data.type === 'success') {
@@ -66,14 +63,35 @@ function App() {
     })
 
     // 模型下载进度
-    window.electronAPI.onModelDownload((data) => {
+    const offModelDownload = window.electronAPI.onModelDownload((data) => {
       if (data.message) {
         setModelDownload(data.message.slice(-200))
       }
     })
 
+    const offProcessingProgress = window.electronAPI.onProcessingProgress((data) => {
+      const { meetingId, progress, message } = data
+      setProcessingProgress(meetingId, progress, message)
+
+      if (progress >= 1) {
+        setMeetingStatus(meetingId, 'completed')
+        window.setTimeout(() => {
+          clearProcessingProgress(meetingId)
+          fetchMeetings().catch(err => console.error('Failed to refresh meetings after processing:', err))
+        }, 1200)
+      }
+    })
+
+    const offProcessingError = window.electronAPI.onProcessingError((data) => {
+      setMeetingStatus(data.meetingId, 'failed', data.error)
+      clearProcessingProgress(data.meetingId)
+      setEnvError(`处理失败: ${data.error}`)
+      fetchMeetings().catch(err => console.error('Failed to refresh meetings after processing error:', err))
+    })
+
     // 系统主题变化 — 只有用户没有手动设置过时才跟随
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+    const handleThemeChange = (e: MediaQueryListEvent) => {
       const saved = localStorage.getItem('meetingRecorderSettings')
       if (saved) {
         const parsed = JSON.parse(saved)
@@ -85,8 +103,19 @@ function App() {
       } else {
         document.documentElement.classList.remove('dark')
       }
-    })
-  }, [])
+    }
+
+    mediaQuery.addEventListener('change', handleThemeChange)
+
+    return () => {
+      offPythonReady()
+      offEnvNotice()
+      offModelDownload()
+      offProcessingProgress()
+      offProcessingError()
+      mediaQuery.removeEventListener('change', handleThemeChange)
+    }
+  }, [clearProcessingProgress, fetchMeetings, setMeetingStatus, setProcessingProgress])
 
   const tabs = [
     { id: 'recorder' as Tab, label: '录音', icon: Mic },

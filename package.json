@@ -5,10 +5,11 @@
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "vite",
-    "build": "NODE_ENV=production npx vite build && electron-builder",
-    "build:vite": "tsc && vite build",
+    "sync:python": "bash scripts/sync-python.sh",
+    "build": "npm run sync:python && NODE_ENV=production npx vite build && electron-builder",
+    "build:vite": "npm run sync:python && tsc && vite build",
     "preview": "vite preview",
-    "electron:dev": "concurrently \"vite\" \"electron .\"",
+    "electron:dev": "npm run sync:python && concurrently \"vite\" \"electron .\"",
     "electron:build": "npm run build:vite && electron-builder"
   },
   "keywords": [

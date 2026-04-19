@@ -3,6 +3,7 @@ import { Search, Calendar, Users, Clock, Star, Trash2, FileAudio, X, ChevronRigh
 import { useMeetingStore, MeetingDetail, SearchFilters, DateRange, DurationRange, Segment } from '@/stores/meetingStore'
 import AudioPlayer from './AudioPlayer'
 import BatchExportModal from './BatchExportModal'
+import { startAudioProcessing } from '@/lib/audioProcessing'
 
 export default function HistoryView() {
   const {
@@ -178,18 +179,7 @@ export default function HistoryView() {
     const fileName = filePath.split('/').pop() || filePath
     setImportingFile(fileName)
     try {
-      // 1. 复制文件到 app data 目录
-      const importResult = await window.electronAPI.importAudioFile(filePath)
-      if (!importResult || !importResult.audioPath) {
-        console.error('Import failed: no audioPath returned')
-        return
-      }
-
-      // 2. 调用 process_file 开始转写（后台进行）
-      const processResult = await window.electronAPI.pythonCall('process_file', {
-        filePath: importResult.audioPath,
-        language: 'zh'
-      }) as { meetingId?: string; status?: string }
+      const processResult = await startAudioProcessing(filePath)
 
       if (processResult && processResult.meetingId) {
         // 刷新列表
@@ -199,6 +189,7 @@ export default function HistoryView() {
       }
     } catch (err) {
       console.error('Import failed:', err)
+      alert(`导入失败: ${err instanceof Error ? err.message : '无法处理该音频文件'}`)
     } finally {
       setImportingFile(null)
     }
@@ -609,6 +600,7 @@ function MeetingDetailView({
   const [editingSpeakerId, setEditingSpeakerId] = useState<string | null>(null)
   const [speakerNameValue, setSpeakerNameValue] = useState('')
   const [showAudioPlayer, setShowAudioPlayer] = useState(false)
+  const [audioSrc, setAudioSrc] = useState<string | null>(null)
   const { updateMeeting, updateSpeaker } = useMeetingStore()
 
   if (detail.segments.length === 0) return <div className="text-center py-8 text-gray-400 dark:text-gray-500">暂无转写内容</div>
@@ -657,10 +649,29 @@ function MeetingDetailView({
     setEditingSpeakerId(null)
   }
 
-  // 构建 audio URL
-  const audioSrc = detail.meeting.audioPath
-    ? (detail.meeting.audioPath.startsWith('file://') ? detail.meeting.audioPath : `file://${detail.meeting.audioPath}`)
-    : null
+  useEffect(() => {
+    let cancelled = false
+
+    if (!detail.meeting.audioPath) {
+      setAudioSrc(null)
+      return
+    }
+
+    window.electronAPI.getAudioUrl(detail.meeting.audioPath).then((url) => {
+      if (!cancelled) {
+        setAudioSrc(url || null)
+      }
+    }).catch((err) => {
+      console.error('Failed to resolve audio URL:', err)
+      if (!cancelled) {
+        setAudioSrc(null)
+      }
+    })
+
+    return () => {
+      cancelled = true
+    }
+  }, [detail.meeting.audioPath])
 
   return (
     <div>

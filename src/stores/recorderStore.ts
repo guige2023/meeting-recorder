@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { v4 as uuidv4 } from 'uuid'
+import { getAppSettings, normalizeLanguage } from '@/lib/settings'
 
 interface Caption {
   id: string
@@ -24,6 +25,17 @@ interface RecorderState {
   updateAudioLevel: (level: number) => void
   addCaption: (caption: Omit<Caption, 'id'>) => void
   setSpeakersCount: (count: number) => void
+  setVadStatus: (status: 'idle' | 'detecting' | 'speech') => void
+}
+
+let removeCaptureStatusListener: (() => void) | null = null
+let removeRealtimeCaptionListener: (() => void) | null = null
+
+function cleanupRecorderListeners() {
+  removeCaptureStatusListener?.()
+  removeRealtimeCaptionListener?.()
+  removeCaptureStatusListener = null
+  removeRealtimeCaptionListener = null
 }
 
 export const useRecorderStore = create<RecorderState>((set, get) => ({
@@ -37,11 +49,26 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
 
   startRecording: async () => {
     try {
+      cleanupRecorderListeners()
+
+      const permission = await window.electronAPI.requestMicrophoneAccess()
+      if (!permission.granted) {
+        console.error('Microphone access denied:', permission)
+        if (permission.status === 'denied' || permission.status === 'restricted') {
+          await window.electronAPI.openMicrophonePermission()
+        }
+        return
+      }
+
+      const settings = await getAppSettings()
+      const resolvedLanguage = normalizeLanguage(settings.language)
+      const enableRealtime = settings.realtimeCaption !== false
+
       const result = await window.electronAPI.pythonCall('capture_start', {
         sampleRate: 16000,
         channels: 1,
-        realtime: true,  // 启用实时字幕 VAD + ASR
-        language: 'zh'
+        realtime: enableRealtime,
+        language: resolvedLanguage
       })
       set({
         status: 'recording',
@@ -51,7 +78,7 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
         speakersCount: 0
       })
 
-      window.electronAPI.onCaptureStatus((data) => {
+      removeCaptureStatusListener = window.electronAPI.onCaptureStatus((data) => {
         if (data.recordingId !== get().recordingId) return
         set({
           duration: data.duration || get().duration + 0.1,
@@ -60,7 +87,7 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
         })
       })
 
-      window.electronAPI.onRealtimeCaption((data) => {
+      removeRealtimeCaptionListener = window.electronAPI.onRealtimeCaption((data) => {
         if (data.recordingId !== get().recordingId) return
         get().addCaption({
           speaker: data.speaker || '未知',
@@ -103,9 +130,11 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
       })
 
       if (result?.wavPath) {
+        const settings = await getAppSettings()
+        const resolvedLanguage = normalizeLanguage(settings.language)
         window.electronAPI.pythonCall('process_file', {
           filePath: result.wavPath,
-          language: 'zh'
+          language: resolvedLanguage
         }).catch(err => console.error('process_file error:', err))
       }
 
@@ -113,10 +142,12 @@ export const useRecorderStore = create<RecorderState>((set, get) => ({
         status: 'idle',
         recordingId: null
       })
+      cleanupRecorderListeners()
       return result
     } catch (err) {
       console.error('Failed to stop recording:', err)
       set({ status: 'idle' })
+      cleanupRecorderListeners()
     }
   },
 

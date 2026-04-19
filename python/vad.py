@@ -9,6 +9,7 @@ import queue
 import threading
 import json
 import sys
+from model_paths import get_silero_repo_dir
 
 class VAD:
     def __init__(self):
@@ -26,11 +27,16 @@ class VAD:
             torch.set_num_threads(1)
 
             # 加载 Silero VAD
-            self.model, utils = torch.hub.load(
-                repo_or_dir='snakers4/silero-vad',
-                model='silero_vad',
-                trust_repo=True
-            )
+            repo_or_dir = get_silero_repo_dir() or 'snakers4/silero-vad'
+            load_kwargs = {
+                'repo_or_dir': repo_or_dir,
+                'model': 'silero_vad',
+                'trust_repo': True,
+            }
+            if repo_or_dir != 'snakers4/silero-vad':
+                load_kwargs['source'] = 'local'
+
+            self.model, utils = torch.hub.load(**load_kwargs)
             self._get_st_func = utils[0]
             self.models_loaded = True
             print('Silero-VAD model loaded', file=sys.stderr)
