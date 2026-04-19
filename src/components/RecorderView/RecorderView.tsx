@@ -35,6 +35,21 @@ export default function RecorderView() {
 
   // Import state
   const [importProgress, setImportProgress] = useState<ImportProgress | null>(null)
+
+  // Subscribe to backend progress updates during import
+  useEffect(() => {
+    if (!importProgress) return
+    const unsubscribe = window.electronAPI.onProcessingProgress((data) => {
+      if (data.meetingId === importProgress.meetingId) {
+        setImportProgress(prev => prev ? {
+          ...prev,
+          progress: data.progress,
+          message: data.message
+        } : null)
+      }
+    })
+    return unsubscribe
+  }, [importProgress])
   const [transcriptionResult, setTranscriptionResult] = useState<MeetingDetail | null>(null)
   const [showResult, setShowResult] = useState(false)
 

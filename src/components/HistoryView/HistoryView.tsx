@@ -12,6 +12,7 @@ export default function HistoryView() {
     processingProgress,
     fetchMeetings,
     deleteMeeting,
+    deleteMeetings,
     toggleFavorite,
     updateMeeting,
     getMeetingDetail,
@@ -436,12 +437,24 @@ export default function HistoryView() {
                 <span className="text-xs">☐</span> 全选
               </button>
               {batchSelectedIds.size > 0 && (
-                <button
-                  onClick={() => setBatchModalOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary-500 hover:bg-primary-600 text-white dark:bg-primary-600 dark:hover:bg-primary-700 rounded-lg transition-colors"
-                >
-                  ↓ 批量导出 ({batchSelectedIds.size})
-                </button>
+                <>
+                  <button
+                    onClick={() => setBatchModalOpen(true)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-primary-500 hover:bg-primary-600 text-white dark:bg-primary-600 dark:hover:bg-primary-700 rounded-lg transition-colors"
+                  >
+                    ↓ 批量导出 ({batchSelectedIds.size})
+                  </button>
+                  <button
+                    onClick={async () => {
+                      if (!confirm(`确定删除选中的 ${batchSelectedIds.size} 个会议吗？此操作不可恢复。`)) return
+                      await deleteMeetings(Array.from(batchSelectedIds))
+                      setBatchSelectedIds(new Set())
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-red-500 hover:bg-red-600 text-white dark:bg-red-600 dark:hover:bg-red-700 rounded-lg transition-colors"
+                  >
+                    <Trash2 size={14} /> 批量删除 ({batchSelectedIds.size})
+                  </button>
+                </>
               )}
               <button
                 onClick={handleFileSelect}

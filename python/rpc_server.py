@@ -300,6 +300,9 @@ def handle_request(method, params, rpc_id):
         elif method == 'delete_meeting':
             transcription_service.delete_meeting(params['id'])
             return {'status': 'deleted'}
+        elif method == 'delete_meetings':
+            transcription_service.delete_meetings(params.get('ids', []))
+            return {'status': 'deleted', 'count': len(params.get('ids', []))}
         elif method == 'toggle_favorite':
             transcription_service.toggle_favorite(params['id'])
             return {'status': 'ok'}

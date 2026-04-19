@@ -566,6 +566,21 @@ class TranscriptionService:
         conn.commit()
         conn.close()
 
+    def delete_meetings(self, meeting_ids: list):
+        """批量删除会议"""
+        conn = sqlite3.connect(_get_db_path())
+        c = conn.cursor()
+        for meeting_id in meeting_ids:
+            c.execute('SELECT id FROM segments WHERE meeting_id = ?', (meeting_id,))
+            segment_ids = [row[0] for row in c.fetchall()]
+            for sid in segment_ids:
+                c.execute('DELETE FROM segments_fts WHERE segment_id = ?', (sid,))
+            c.execute('DELETE FROM segments WHERE meeting_id = ?', (meeting_id,))
+            c.execute('DELETE FROM speakers WHERE meeting_id = ?', (meeting_id,))
+            c.execute('DELETE FROM meetings WHERE id = ?', (meeting_id,))
+        conn.commit()
+        conn.close()
+
     def toggle_favorite(self, meeting_id: str):
         """切换收藏状态"""
         conn = sqlite3.connect(_get_db_path())

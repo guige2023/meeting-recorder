@@ -60,6 +60,7 @@ interface MeetingState {
 
   fetchMeetings: () => Promise<void>
   deleteMeeting: (id: string) => Promise<void>
+  deleteMeetings: (ids: string[]) => Promise<void>
   toggleFavorite: (id: string) => Promise<void>
   updateMeeting: (id: string, updates: Partial<Meeting>) => Promise<void>
   getMeetingDetail: (id: string) => Promise<MeetingDetail | null>
@@ -96,6 +97,17 @@ export const useMeetingStore = create<MeetingState>((set, get) => ({
       }))
     } catch (err) {
       console.error('Failed to delete meeting:', err)
+    }
+  },
+
+  deleteMeetings: async (ids: string[]) => {
+    try {
+      await window.electronAPI.pythonCall('delete_meetings', { ids })
+      set(state => ({
+        meetings: state.meetings.filter(m => !ids.includes(m.id))
+      }))
+    } catch (err) {
+      console.error('Failed to delete meetings:', err)
     }
   },
 
