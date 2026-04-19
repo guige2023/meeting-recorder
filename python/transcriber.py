@@ -347,8 +347,18 @@ class TranscriptionService:
 
     def _run_transcription(self, audio_path: str, language: str) -> List[Dict]:
         """运行语音转写"""
+        import sys
         # 强制使用中文，避免 auto 检测出错导致日文/韩文噪声
         forced_lang = 'zh' if language == 'auto' else language
+        print(f'[TRANSCRIBE] language={forced_lang}, audio_path={audio_path}', file=sys.stderr)
+
+        # 先验证音频文件是否可读
+        try:
+            import soundfile as sf
+            audio_data, sr = sf.read(audio_path, dtype='float32')
+            print(f'[TRANSCRIBE] audio read: shape={audio_data.shape}, sr={sr}, duration={len(audio_data)/sr:.1f}s', file=sys.stderr)
+        except Exception as e:
+            print(f'[TRANSCRIBE] audio read error: {e}', file=sys.stderr)
 
         result = self.transcription_model.generate(
             input=audio_path,
@@ -356,6 +366,8 @@ class TranscriptionService:
             use_itn=True,
             batch_size_s=30
         )
+
+        print(f'[TRANSCRIBE] model result: {result}', file=sys.stderr)
 
         segments = []
         if result and len(result) > 0:
